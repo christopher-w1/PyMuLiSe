@@ -9,7 +9,7 @@ def find_song_paths(music_dir: str) -> list:
     """
     song_paths = []
     def find_rec(music_dir: str):
-        print(f"Checking {music_dir}")
+        #print(f"Checking {music_dir}")
         if not os.path.exists(music_dir):
             return
         # Check if path is a music file
