@@ -218,6 +218,19 @@ class Song:
         song.peak = data.get("peak", 0)
         return song
 
+    def pretty_print(self):
+        print(f"File Path: {self.file_path}")
+        print(f"Title: {self.title}")
+        print(f"Album: {self.album}")
+        print(f"Track Number: {self.track_number}")
+        print(f"Artist: {self.album_artist}")
+        print(f"Duration: {self.duration} seconds")
+        print(f"Release Year: {self.release_year}")
+        print(f"Genres: {', '.join(self.genres)}")
+        print(f"Play Count: {self.play_count}")
+        print(f"Last Played: {self.last_played}")
+        print(f"Loudness: {self.loudness} LUFS")
+        print(f"Peak: {self.peak} dBFS")
 
     def __str__(self):
         return f"{self.title} by {self.album_artist} from the album {self.album} ({self.duration} seconds)"
