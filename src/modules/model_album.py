@@ -1,14 +1,20 @@
-from model_song import Song
+from modules.model_song import Song
 from hashlib import sha256
+from modules.utils import find_cover_art
 
-class album:
-    def __init__(self):
+class Album:
+    def __init__(self, album_path: str):
         self.name = ""
         self.album_artist = ""
         self.artists : list[str] = []
-        self.year = 0
+        self.release_year = 0
         self.play_count = 0
         self.songs : list[Song] = []
+        self.path = ""
+        self.cover_art = find_cover_art(album_path)
+        self.album_path = album_path
+        self.loudness = 0
+        self.peak = 0
         
     def _retag_from_songs(self):
         # Use most common album name
@@ -44,8 +50,23 @@ class album:
         if not self.album_artist or str(self.album_artist).lower() == "unknown":
             self.album_artist = "Various Artists"
         
+        # Use most current year
+        self.release_year = max([song.release_year for song in self.songs if song.release_year] + [self.release_year])
+        
+    def _sort_by_track_number(self):
+        self.songs.sort(key=lambda x: (x.disc_number, x.track_number))
+            
+    def pretty_print(self):
+        print(f"Album: {self.name}")
+        print(f"Artist: {self.album_artist}")
+        print(f"Year: {self.release_year}")
+        print(f"Play Count: {self.play_count}")
+        print(f"Songs: {len(self.songs)}")
+        for song in self.songs:
+            print(f"  - {song.title} by {song.get_artists()} ({song.release_year})")
+        
     def get_hash(self) -> str:
-        hash_str = f"{self.name}{self.album_artist}{self.year}"
+        hash_str = f"{self.name}{self.album_artist}{self.release_year}"
         for song in self.songs:
             hash_str += song.get_hash()
         return sha256(hash_str.encode()).hexdigest()
@@ -54,8 +75,9 @@ class album:
         if isinstance(song, Song):
             self.songs.append(song)
             self._retag_from_songs()
+            self._sort_by_track_number()
         else:
             raise TypeError("Expected a Song object")
 
     def __str__(self):
-        return f"Album: {self.name}, Artist: {self.album_artist}, Year: {self.year}"
+        return f"Album: {self.name}, Artist: {self.album_artist}, Year: {self.release_year}"

@@ -8,7 +8,7 @@ from datetime import datetime
 from modules.utils import find_cover_art, calculate_loudness
 
 class Song:
-    def __init__(self, file_path: str = ""):
+    def __init__(self, file_path: str = "", skip_analysis: bool = False):
         self.file_path = file_path
         self.track_number = 0
         self.disc_number = 0
@@ -29,6 +29,8 @@ class Song:
         self.cover_art = ""
         self.loudness = 0
         self.peak = 0
+        self.lastfm_playcount = 0
+        self.lastfm_tags = []
         
         if not file_path:
             return
@@ -92,7 +94,8 @@ class Song:
         self.cover_art = find_cover_art(file_path)
         
         # Calculate loudness and peak
-        self.loudness, self.peak = calculate_loudness(file_path)
+        if not skip_analysis:
+            self.loudness, self.peak = calculate_loudness(file_path)
         
     def check_file(self) -> bool:
         if not os.path.exists(self.file_path):
@@ -156,11 +159,14 @@ class Song:
             "cover_art": self.cover_art,
             "loudness": self.loudness,
             "peak": self.peak,
+            "lastfm_playcount": self.lastfm_playcount,
+            "lastfm_tags": self.lastfm_tags,
         }
     
     @classmethod
     def from_dict(cls, data: dict):
-        song = cls(data["file_path"])
+        song = cls()
+        song.file_path = data.get("file_path", "")
         song.track_number = data.get("track_number", 0)
         song.disc_number = data.get("disc_number", 0)
         song.title = data.get("title", "")
@@ -180,6 +186,8 @@ class Song:
         song.cover_art = data.get("cover_art", "")
         song.loudness = data.get("loudness", 0)
         song.peak = data.get("peak", 0)
+        song.lastfm_playcount = data.get("lastfm_playcount", 0)
+        song.lastfm_tags = data.get("lastfm_tags", [])
         return song
 
     def pretty_print(self):
