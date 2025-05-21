@@ -64,8 +64,8 @@ class Song:
         self.format = ""
         self.file_size = 0
         self.cover_art = ""
-        self.loudness = None
-        self.peak = None
+        self.loudness = 0
+        self.peak = 0
         
         if not file_path:
             return
@@ -139,6 +139,15 @@ class Song:
             print(f"[ERROR] File is not readable: {self.file_path}")
             return False
         return True
+    
+    def file_changed(self) -> bool:
+        """Check if the file has changed since last analysis, based on file size."""
+        current_size = os.path.getsize(self.file_path)
+        if current_size != self.file_size:
+            print(f"[INFO] File size changed for {self.file_path}: {self.file_size} -> {current_size}")
+            self.file_size = current_size
+            return True
+        return False
         
     def add_genres(self, genres: list[str]):
         self.genres.extend(genres)
@@ -161,6 +170,55 @@ class Song:
     
     def get_title(self) -> str:
         return self.title if self.title else "Unknown"
+    
+    def to_dict(self):
+        return {
+            "file_path": self.file_path,
+            "track_number": self.track_number,
+            "disc_number": self.disc_number,
+            "title": self.title,
+            "album_artist": self.album_artist,
+            "other_artists": self.other_artists,
+            "album": self.album,
+            "duration": self.duration,
+            "release_year": self.release_year,
+            "genres": self.genres,
+            "play_count": self.play_count,
+            "last_played": self.last_played,
+            "lyrics": self.lyrics,
+            "explicit": self.explicit,
+            "bitrate": self.bitrate,
+            "format": self.format,
+            "file_size": self.file_size,
+            "cover_art": self.cover_art,
+            "loudness": self.loudness,
+            "peak": self.peak,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        song = cls(data["file_path"])
+        song.track_number = data.get("track_number", 0)
+        song.disc_number = data.get("disc_number", 0)
+        song.title = data.get("title", "")
+        song.album_artist = data.get("album_artist", "")
+        song.other_artists = data.get("other_artists", [])
+        song.album = data.get("album", "")
+        song.duration = data.get("duration", 0)
+        song.release_year = data.get("release_year", 0)
+        song.genres = data.get("genres", [])
+        song.play_count = data.get("play_count", 0)
+        song.last_played = data.get("last_played", "")
+        song.lyrics = data.get("lyrics", "")
+        song.explicit = data.get("explicit", False)
+        song.bitrate = data.get("bitrate", 0)
+        song.format = data.get("format", "")
+        song.file_size = data.get("file_size", 0)
+        song.cover_art = data.get("cover_art", "")
+        song.loudness = data.get("loudness", 0)
+        song.peak = data.get("peak", 0)
+        return song
+
 
     def __str__(self):
         return f"{self.title} by {self.album_artist} from the album {self.album} ({self.duration} seconds)"
