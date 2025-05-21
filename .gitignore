@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 
 music/
+.env_vars.sh
