@@ -1,6 +1,5 @@
 import os, hashlib, subprocess, re, r128gain
 from typing import Optional
-from mutagen import easy # type: ignore
 from mutagen import File # type: ignore
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
