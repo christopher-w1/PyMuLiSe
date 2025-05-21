@@ -1,47 +1,11 @@
-import os, hashlib, subprocess, re, r128gain
-from typing import Optional
+import os, hashlib
 from mutagen import File # type: ignore
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from datetime import datetime
-
-def calculate_loudness(file_path: str) -> tuple[Optional[float], Optional[float]]:
-    loudness = None
-    peak = None
-    try:
-        result = subprocess.run(["r128gain", "-d", file_path], capture_output=True, text=True, check=True)
-        output = result.stdout + result.stderr
-        loudness_match = re.search(r"loudness\s*=\s*(-?\d+\.\d+)\s*LUFS", output)
-        peak_match = re.search(r"sample peak\s*=\s*(-?\d+\.\d+)\s*dBFS", output)
-        if loudness_match:
-            loudness = float(loudness_match.group(1))
-        if peak_match:
-            peak = float(peak_match.group(1))
-        print(f"[INFO] Loudness for '{file_path}':\n{loudness} LUFS, Peak: {peak} dBFS")
-    except Exception as e:
-        print(f"[ERROR] Loudness analysis failed for {file_path}: {e}")
-    return loudness, peak
-
-def find_cover_art(file_path: str) -> str:
-    directory = os.path.dirname(file_path)
-    image_extensions = [".jpg", ".jpeg", ".png", ".webp"]
-    preferred_names = ["cover", "folder", "front", "album"]
-
-    for fname in os.listdir(directory):
-        name, ext = os.path.splitext(fname)
-        if ext.lower() in image_extensions:
-            if name.lower() in preferred_names:
-                return os.path.join(directory, fname)
-
-    # Fallback: Erstes beliebiges Bild nehmen
-    for fname in os.listdir(directory):
-        _, ext = os.path.splitext(fname)
-        if ext.lower() in image_extensions:
-            return os.path.join(directory, fname)
-
-    return ""
+from modules.utils import find_cover_art, calculate_loudness
 
 class Song:
     def __init__(self, file_path: str = ""):
@@ -91,9 +55,9 @@ class Song:
             raise ValueError("Could not read metadata")
         
         if hasattr(metadata.info, 'bitrate') and metadata.info.bitrate: # type: ignore
-            self.bitrate = metadata.info.bitrate # type: ignore
+            self.bitrate = int(metadata.info.bitrate) // 1024 # type: ignore
         elif self.duration and self.duration > 0:
-            self.bitrate = int((self.file_size * 8) / self.duration)    
+            self.bitrate = int((self.file_size * 8) / self.duration) // 1024  
 
         if raw and hasattr(raw, 'info') and hasattr(metadata.info, 'length'):
             self.duration = int(raw.info.length)
@@ -223,7 +187,7 @@ class Song:
         print(f"Title: {self.title}")
         print(f"Album: {self.album}")
         print(f"Track Number: {self.track_number}")
-        print(f"Artist: {self.album_artist}")
+        print(f"Artist: {self.get_artists()}")
         print(f"Duration: {self.duration} seconds")
         print(f"Release Year: {self.release_year}")
         print(f"Genres: {', '.join(self.genres)}")
@@ -231,6 +195,8 @@ class Song:
         print(f"Last Played: {self.last_played}")
         print(f"Loudness: {self.loudness} LUFS")
         print(f"Peak: {self.peak} dBFS")
+        print(f"Bitrate: {self.bitrate} kbps")
+        print(f"Format: {self.format}")
 
     def __str__(self):
         return f"{self.title} by {self.album_artist} from the album {self.album} ({self.duration} seconds)"
