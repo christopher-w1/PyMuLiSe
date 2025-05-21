@@ -197,6 +197,12 @@ class Song:
         print(f"Peak: {self.peak} dBFS")
         print(f"Bitrate: {self.bitrate} kbps")
         print(f"Format: {self.format}")
-
+        
+    def get_hash(self) -> str:
+        """Generate a hash for the song based on its metadata."""
+        return hashlib.sha256(
+            (f"{self.get_artists()}|{self.album}|{self.disc_number}.{self.track_number}|{self.title}").encode()
+        ).hexdigest()
+        
     def __str__(self):
         return f"{self.title} by {self.album_artist} from the album {self.album} ({self.duration} seconds)"
