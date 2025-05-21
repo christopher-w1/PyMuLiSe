@@ -1,4 +1,5 @@
-import os, hashlib
+import os, hashlib, subprocess, re, r128gain
+from typing import Optional
 from mutagen import easy # type: ignore
 from mutagen import File # type: ignore
 from mutagen.mp3 import MP3
@@ -6,6 +7,23 @@ from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from datetime import datetime
+
+def calculate_loudness(file_path: str) -> tuple[Optional[float], Optional[float]]:
+    loudness = None
+    peak = None
+    try:
+        result = subprocess.run(["r128gain", "-d", file_path], capture_output=True, text=True, check=True)
+        output = result.stdout + result.stderr
+        loudness_match = re.search(r"loudness\s*=\s*(-?\d+\.\d+)\s*LUFS", output)
+        peak_match = re.search(r"sample peak\s*=\s*(-?\d+\.\d+)\s*dBFS", output)
+        if loudness_match:
+            loudness = float(loudness_match.group(1))
+        if peak_match:
+            peak = float(peak_match.group(1))
+        print(f"[INFO] Loudness for '{file_path}':\n{loudness} LUFS, Peak: {peak} dBFS")
+    except Exception as e:
+        print(f"[ERROR] Loudness analysis failed for {file_path}: {e}")
+    return loudness, peak
 
 def find_cover_art(file_path: str) -> str:
     directory = os.path.dirname(file_path)
@@ -27,7 +45,7 @@ def find_cover_art(file_path: str) -> str:
     return ""
 
 class Song:
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str = ""):
         self.file_path = file_path
         self.track_number = 0
         self.disc_number = 0
@@ -44,9 +62,15 @@ class Song:
         self.explicit = False
         self.bitrate = 0
         self.format = ""
-        self.file_size = os.path.getsize(file_path)
+        self.file_size = 0
         self.cover_art = ""
-
+        self.loudness = None
+        self.peak = None
+        
+        if not file_path:
+            return
+        
+        os.path.getsize(file_path)
         audio = File(file_path, easy=True)
         raw = File(file_path)
 
@@ -103,6 +127,18 @@ class Song:
 
         # Find cover art
         self.cover_art = find_cover_art(file_path)
+        
+        # Calculate loudness and peak
+        self.loudness, self.peak = calculate_loudness(file_path)
+        
+    def check_file(self) -> bool:
+        if not os.path.exists(self.file_path):
+            print(f"[ERROR] File does not exist: {self.file_path}")
+            return False
+        if not os.access(self.file_path, os.R_OK):
+            print(f"[ERROR] File is not readable: {self.file_path}")
+            return False
+        return True
         
     def add_genres(self, genres: list[str]):
         self.genres.extend(genres)
