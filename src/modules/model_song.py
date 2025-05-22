@@ -1,4 +1,4 @@
-import os, hashlib
+import os, hashlib, re
 from mutagen import File # type: ignore
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
@@ -50,7 +50,7 @@ class Song:
         if not file_path:
             return
         
-        os.path.getsize(file_path)
+        self.file_size = os.path.getsize(file_path)
         audio = File(file_path, easy=True)
         raw = File(file_path)
 
@@ -88,12 +88,14 @@ class Song:
         self.album_artist = tags.get("albumartist", tags.get("artist", [""]))[0]
         self.other_artists = tags.get("artist", [])[1:] if len(tags.get("artist", [])) > 1 else []
         self.genres = tags.get("genre", [])
+        self._fix_genres()
         self.release_year = int(tags.get("date", ["0"])[0][:4]) if tags.get("date") else 0
         self.lyrics = tags.get("lyrics", [""])[0] if "lyrics" in tags else ""
         track_info = tags.get("tracknumber", ["0"])[0]
         self.track_number = int(track_info.split("/")[0]) if track_info else 0
         disc_info = tags.get("discnumber", ["0"])[0]
         self.disc_number = int(disc_info.split("/")[0]) if disc_info else 0
+        self.get_hash()
 
         # Recognize explicit content
         if "explicit" in tags:
@@ -276,7 +278,22 @@ class Song:
         song.lastfm_playcount = data.get("lastfm_playcount", 0)
         song.lastfm_tags = data.get("lastfm_tags", [])
         song.hash = data.get("hash", "")
+        song._fix_genres()
         return song
+
+
+    def _fix_genres(self):
+        if not self.genres:
+            return
+
+        fixed = []
+        for genre in self.genres:
+            # Split at common separators: commas, slashes, semicolons, " & ", " and ", etc.
+            parts = re.split(r'[,&/;]| and |\s+\|\s+|\s+/\s+|\s+-\s+', genre)
+            fixed.extend(part.strip() for part in parts if part.strip())
+
+        # Optional: Duplikate entfernen
+        self.genres = sorted(set(fixed), key=fixed.index)
 
     def pretty_print(self):
         """

@@ -106,6 +106,12 @@ class Album:
         # Use most current year
         self.release_year = max([song.release_year for song in self.songs if song.release_year] + [self.release_year])
         
+        # Peak and loudness
+        loud_values = [song.loudness for song in self.songs if song.loudness]
+        self.loudness = sum(loud_values) / len(loud_values) if loud_values else -6
+        peak_values = [(song.peak or 0) for song in self.songs]
+        self.peak = max(peak_values) if peak_values else 0
+        
     def _sort_by_track_number(self):
         """
         Sort the songs in the album by track number and disc number.
