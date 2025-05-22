@@ -23,11 +23,29 @@ class Artist:
         self.name = name
         self.genres = genres
         self.play_count = 0
-        self.songs: Optional[list[Song]] = []
-        self.albums: Optional[list[Album]] = []
+        self.songs: list[Song] = []
+        self.albums: list[Album] = []
         
     def get_hash(self) -> str:
         return self.hash
+    
+    def _update_most_common_name(self):
+        if not self.songs:
+            return
+        names = {}
+        for song in self.songs:
+            if song.album_artist and str(song.album_artist).lower() != "unknown":
+                names[song.album_artist] = names.get(song.album_artist, 0) + 1
+        max_count = 0
+        for name, count in names.items():
+            if count == len(self.songs):
+                self.name = name
+            elif count > max_count:
+                self.name = name
+                max_count = count
+                
+    def force_update_name(self, name: str):
+        self.name = name
         
     def is_artist_of(self, song: Song) -> bool:
         clean_artist_names = song.album_artist.split(",") if song.album_artist else []
@@ -45,8 +63,10 @@ class Artist:
     def add_song(self, song: Song):
         if not self.songs:
             self.songs = []
-        self.songs.append(song)
+        if not song in self.songs:
+            self.songs.append(song)
         self.play_count += song.play_count
+        self._update_most_common_name()
 
     def __repr__(self):
         return f"Artist(name={self.name}, genre={', '.join(self.genres)})" if self.genres else f"Artist(name={self.name})"
