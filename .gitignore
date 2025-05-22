@@ -175,3 +175,7 @@ cython_debug/
 
 music/
 .env_vars.sh
+data/albums.json
+data/artists.json
+data/songs.json
+data/
