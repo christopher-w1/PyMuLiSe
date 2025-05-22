@@ -3,12 +3,22 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from modules.library_service import LibraryService
 
-app = FastAPI()
+from contextlib import asynccontextmanager
+
 libraryService = LibraryService()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await libraryService.start_background_task()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 
 def check_access_token(token: str) -> bool:
     valid_token = os.getenv("ACCESS_TOKEN")
+    print(f"Valid token: {valid_token}")
+    print(f"Provided token: {token}")
     return token == valid_token
 
 
@@ -128,7 +138,7 @@ async def get_song_file(request: Request):
     return FileResponse(
         path=file_path,
         media_type=mime_type,
-        filename=os.path.basename(file_path)
+        filename= f"{song_hash}.{os.path.basename(file_path).split('.')[-1]}"
     )
 
 
@@ -158,3 +168,28 @@ async def get_song_file_from_metadata(request: Request):
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type is None:
         mime_type = "application/octet-stream"
+    
+    return FileResponse(
+        path=file_path,
+        media_type=mime_type,
+        filename=os.path.basename(file_path)
+    )
+        
+        
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the PyMuLiSe API!",
+            "status": "running",
+            "available_endpoints": [
+                "/get_songs",
+                "/get_artists",
+                "/get_albums",
+                "/get_song_details",
+                "/get_cover_art",
+                "/get_song_file",
+                "/get_song_file_from_metadata"
+            ]}
+        
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)

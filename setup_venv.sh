@@ -24,10 +24,12 @@ fi
 if [ ! -f "$ENV_VARS_FILE" ]; then
     echo "🔧 Setting up environment variables (only once)..."
     read -p "Enter your LASTFM_API_KEY: " lastfm
+    read -p "Enter your ACCESS_TOKEN for PyMuLise: " pymulise
     read -p "Enter the absolute path to your MUSIC_DIR: " music
     read -p "Enter your REST_API_PORT (e.g. 8080): " port
 
     echo "export LASTFM_API_KEY=\"$lastfm\"" > "$ENV_VARS_FILE"
+    echo "export ACCESS_TOKEN=\"$pymulise\"" > "$ENV_VARS_FILE"
     echo "export MUSIC_DIR=\"$music\"" >> "$ENV_VARS_FILE"
     echo "export REST_API_PORT=\"$port\"" >> "$ENV_VARS_FILE"
 

@@ -1,8 +1,8 @@
 import asyncio
 from modules.library_utils import scan_library, song_recommendations, load_library
-from model_album import Album
-from model_song import Song
-from model_artist import Artist
+from modules.model_album import Album
+from modules.model_song import Song
+from modules.model_artist import Artist
 
 def editing_distance(s1: str, s2: str) -> int:
     if len(s1) < len(s2):
@@ -30,7 +30,11 @@ class LibraryService:
         self.album_map: dict[str, Album] = {}
         self.artist_map: dict[str, Artist] = {}
         self._lock = asyncio.Lock()
-        asyncio.create_task(self._periodic_scan())
+        self._task = None  # Erst später starten
+
+    async def start_background_task(self):
+        if self._task is None:
+            self._task = asyncio.create_task(self._periodic_scan())
 
     async def _periodic_scan(self):
         while True:
