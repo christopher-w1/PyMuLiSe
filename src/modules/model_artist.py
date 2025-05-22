@@ -26,6 +26,63 @@ class Artist:
         self.songs: list[Song] = []
         self.albums: list[Album] = []
         
+    def to_dict(self) -> dict:
+        """
+        Convert the artist object to a dictionary representation.
+        This method is useful for serialization or saving the artist data to a file.
+
+        Returns:
+            dict: _description_
+        """
+        return {
+            "hash": self.hash,
+            "name": self.name,
+            "genres": self.genres or [],
+            "play_count": self.play_count,
+            "songs": [song.get_hash() for song in self.songs],
+            "albums": [album.hash for album in self.albums]
+        }
+        
+    @classmethod
+    def from_dict(cls, data: dict, song_map: dict[str, Song], album_map: dict[str, Album]) -> "Artist":
+        """
+        Create an Artist object from a dictionary.
+        This method is useful for deserializing the artist data from a file.
+
+        Args:
+            data (dict): The dictionary containing artist data.
+            song_map (dict[str, Song]): A mapping of song hashes to Song objects.
+            album_map (dict[str, Album]):  A mapping of album hashes to Album objects.
+
+        Returns:
+            Artist: _description_
+        """
+        artist = cls(name=data.get("name", ""), genres=data.get("genres", []))
+        artist.play_count = data.get("play_count", 0)
+        artist.hash = data.get("hash", "")
+
+        # Restore song references
+        song_hashes = data.get("songs", [])
+        artist.songs = [song_map[h] for h in song_hashes if h in song_map]
+
+        # Restore album references
+        album_hashes = data.get("albums", [])
+        artist.albums = [album_map[h] for h in album_hashes if h in album_map]
+
+        return artist
+
+
+        
+    @staticmethod
+    def get_simple_name(name: str) -> str:
+        """
+        Returns a simplified version of the artist name.
+        This method replaces common characters with their simplified versions.
+        """
+        for key, value in CHAR_REPLACEMENTS.items():
+            name = name.replace(key, value)
+        return name.lower().strip()
+        
     def get_hash(self) -> str:
         """ 
         Returns the hash of the artist. 
@@ -80,9 +137,8 @@ class Artist:
         """
         clean_artist_names = song.album_artist.split(",") if song.album_artist else []
         clean_artist_names += song.other_artists if song.other_artists else []
-        clean_artist_names = [name.lower().strip() for name in clean_artist_names]
-        for key, value in CHAR_REPLACEMENTS.items():
-            clean_artist_names = [name.replace(key, value) for name in clean_artist_names]
+        clean_artist_names = [self.get_simple_name(name) for name in clean_artist_names]
+        
         clean_name = self.name.lower().strip()
         for key, value in CHAR_REPLACEMENTS.items():
             clean_name = clean_name.replace(key, value)

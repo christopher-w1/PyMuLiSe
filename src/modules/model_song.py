@@ -109,7 +109,10 @@ class Song:
         
         # Calculate loudness and peak
         if not skip_analysis:
-            self.loudness, self.peak = calculate_loudness(file_path)
+            self.update_loudness()
+            
+    def update_loudness(self):
+        self.loudness, self.peak = calculate_loudness(self.file_path)
         
     def check_file(self) -> bool:
         """

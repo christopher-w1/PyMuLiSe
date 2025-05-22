@@ -17,6 +17,54 @@ class Album:
         self.peak = 0
         self.hash = sha256(album_path.encode()).hexdigest()
         
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "album_artist": self.album_artist,
+            "artists": self.artists,
+            "release_year": self.release_year,
+            "play_count": self.play_count,
+            "songs": [song.get_hash() for song in self.songs],
+            "path": self.path,
+            "cover_art": self.cover_art,
+            "album_path": self.album_path,
+            "loudness": self.loudness,
+            "peak": self.peak,
+            "hash": self.hash
+        }
+        
+    @classmethod
+    def from_dict(cls, data: dict, song_map: dict[str, Song]) -> "Album":
+        """
+        Create an Album object from a dictionary.
+
+        Args:
+            data (dict): The dictionary containing album data.
+            song_map (dict[str, Song]): A mapping of song hashes to Song objects.
+            This is used to restore the song references in the album.
+
+        Returns:
+            Album: An Album object created from the provided data.
+        """
+        album = cls(album_path=data.get("album_path", ""))
+        album.name = data.get("name", "")
+        album.album_artist = data.get("album_artist", "")
+        album.artists = data.get("artists", [])
+        album.release_year = data.get("release_year", 0)
+        album.play_count = data.get("play_count", 0)
+        album.cover_art = data.get("cover_art", "")
+        album.loudness = data.get("loudness", 0)
+        album.peak = data.get("peak", 0)
+        album.hash = data.get("hash", "")
+        album.path = data.get("path", "")
+
+        # Restore song references
+        song_hashes = data.get("songs", [])
+        album.songs = [song_map[h] for h in song_hashes if h in song_map]
+
+        return album
+
+        
     def _retag_from_songs(self):
         """
         Update the album metadata based on the songs in the album.
