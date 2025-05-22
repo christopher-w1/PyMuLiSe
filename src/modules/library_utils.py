@@ -40,7 +40,7 @@ def update_lastfm_inplace_with_processpool(songs: list[Song], max_workers: int =
         # Eindeutige ID → z. B. Pfad oder eigener Hash
         song_id = str(song.file_path)
         artist = (song.album_artist if not song.album_artist == "Various Artists"
-                  else None) or (song.other_artists[0] if song.other_artists else None)
+                  else None) or (song.other_artists[0] if song.other_artists else None) or "Various Artists"
         title = song.title
 
         if artist and title:
@@ -111,7 +111,7 @@ def load_library() -> tuple[list[Song], list[Album], list[Artist]]:
     return song_objects, album_objects, artist_objects
 
 
-def scan_library(verbose: bool = False):
+def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[Artist]]:
     music_dir = os.getenv("MUSIC_DIR")
     if not music_dir:
         raise ValueError("MUSIC_DIR environment variable is not set.")
@@ -190,7 +190,7 @@ def scan_library(verbose: bool = False):
         
     if not was_updated:
         print("Library is up to date. No changes detected.")
-        return
+        return existing_songs, existing_albums, existing_artists
                 
     # Map songs to albums
     album_paths = list(set(os.path.dirname(path) for path in song_paths))
@@ -219,9 +219,10 @@ def scan_library(verbose: bool = False):
             if simple_name not in artist_dict:
                 artist_dict[simple_name] = Artist(raw_name)
             artist_dict[simple_name].add_song(song)
+    artist_objects = list(artist_dict.values())
 
     # Map albums to artists
-    for artist in artist_dict.values():
+    for artist in artist_objects:
         for album in album_objects:
             for song in album.songs:
                 if song in artist.songs and album not in artist.albums:
@@ -238,8 +239,41 @@ def scan_library(verbose: bool = False):
         json.dump([a.to_dict() for a in album_objects], f, ensure_ascii=False, indent=2)
 
     with open("data/artists.json", "w", encoding="utf-8") as f:
-        json.dump([a.to_dict() for a in artist_dict.values()], f, ensure_ascii=False, indent=2)
+        json.dump([a.to_dict() for a in artist_objects], f, ensure_ascii=False, indent=2)
 
     print(f"✓ Library updated successfully with {len(new_songs)} new songs.")
+    return updated_songs, album_objects, artist_objects
 
+def song_similartiy(song1: Song, song2: Song) -> float:
+    """
+    Calculate the similarity between two songs based on their file names.
+    :param song1: Path to the first song.
+    :param song2: Path to the second song.
+    :return: Similarity score between 0 and 1.
+    """
+    similarity = 0.0
+    
+    if song1.file_path == song2.file_path:
+        return 1.0
+    
+    similarity += (len(set(song1.genres) & set(song2.genres)) / max(1, len(set(song1.genres) | set(song2.genres)))) * 0.5
+    similarity += (len(set(song1.lastfm_tags) & set(song2.lastfm_tags)) / max(1, len(set(song1.lastfm_tags) | set(song2.lastfm_tags)))) * 0.5
+    
+    if song1.album.lower() == song2.album.lower() and song1.album_artist.lower() == song2.album_artist.lower():
+        similarity += 0.5
+    
+    return min(1, similarity)
 
+def song_recommendations(song: Song, all_songs: list[Song], threshold: float = 0.5) -> list[Song]:
+    """
+    Get song recommendations based on the similarity of the given song to other songs in the library.
+    :param song: The song to find recommendations for.
+    :param all_songs: List of all songs in the library.
+    :param threshold: Similarity threshold for recommendations.
+    :return: List of recommended songs.
+    """
+    recommendations = []
+    for other_song in all_songs:
+        if song != other_song and song_similartiy(song, other_song) >= threshold:
+            recommendations.append(other_song)
+    return recommendations
