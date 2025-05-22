@@ -78,6 +78,11 @@ class Album:
             self._sort_by_track_number()
         else:
             raise TypeError("Expected a Song object")
+        
+    def album_folder_contains(self, song: Song) -> bool:
+        if song.file_path.startswith(self.album_path):
+            return True
+        return False
 
     def __str__(self):
         return f"Album: {self.name}, Artist: {self.album_artist}, Year: {self.release_year}"
