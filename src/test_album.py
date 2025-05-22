@@ -1,6 +1,6 @@
 from modules.model_song import Song
 from modules.model_album import Album
-from modules.utils import find_song_paths
+from src.modules.filesys_utils import find_song_paths
 import os, time
 music_dir = os.getenv("MUSIC_DIR")
 if not music_dir:

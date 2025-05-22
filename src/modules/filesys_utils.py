@@ -1,6 +1,7 @@
 import os, subprocess, re
 from typing import Optional
 
+
 def find_song_paths(music_dir: str) -> list:
     """
     Find all song paths in the music directory recursively.
@@ -45,6 +46,7 @@ def calculate_loudness(file_path: str) -> tuple[Optional[float], Optional[float]
         print(f"[ERROR] Loudness analysis failed for {file_path}: {e}")
     return loudness, peak
 
+
 def find_cover_art(file_path: str) -> str:
     if not os.path.exists(file_path):
         return ""
@@ -63,5 +65,4 @@ def find_cover_art(file_path: str) -> str:
         _, ext = os.path.splitext(fname)
         if ext.lower() in image_extensions:
             return os.path.join(directory, fname)
-
     return ""

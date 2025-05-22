@@ -1,14 +1,12 @@
 import os
-import time
 import json
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import ThreadPoolExecutor
 from modules.lastfm_client import LastFMClient
-from modules.utils import calculate_loudness
+from modules.filesys_utils import calculate_loudness
 from modules.model_song import Song
 from modules.model_album import Album
 from modules.model_artist import Artist
-from modules.utils import find_song_paths
+from modules.filesys_utils import find_song_paths
 
 def fetch_lastfm_data_minimal(args: tuple[str, str, str]) -> tuple[str, int, list[str]]:
     song_id, artist, title, api_key = args  # type: ignore
