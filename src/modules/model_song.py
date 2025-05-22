@@ -9,6 +9,20 @@ from modules.utils import find_cover_art, calculate_loudness
 
 class Song:
     def __init__(self, file_path: str = "", skip_analysis: bool = False):
+        """
+        Initialize the Song object with metadata from the audio file.
+        This includes title, album, artist, duration, release year, genres,
+
+        Args:
+            file_path (str, optional): Path to the audio file. Defaults to "".
+            skip_analysis (bool, optional): Skip loudness analysis. Defaults to False.
+
+        Raises:
+            ValueError: Unsupported file format
+            ValueError: Could not read metadata
+            ValueError: Could not read audio file
+            ValueError: File not found
+        """
         self.file_path = file_path
         self.track_number = 0
         self.disc_number = 0
@@ -98,6 +112,12 @@ class Song:
             self.loudness, self.peak = calculate_loudness(file_path)
         
     def check_file(self) -> bool:
+        """
+        Check if the file exists and is readable.
+
+        Returns:
+            bool: True if the file exists and is readable, False otherwise.
+        """
         if not os.path.exists(self.file_path):
             print(f"[ERROR] File does not exist: {self.file_path}")
             return False
@@ -107,7 +127,14 @@ class Song:
         return True
     
     def file_changed(self) -> bool:
-        """Check if the file has changed since last analysis, based on file size."""
+        """
+        Check if the file has changed since it was last analyzed, based on the file size.
+
+        Returns:
+            bool: True if the file size has changed, False otherwise.
+        """
+        if not self.check_file():
+            return False
         current_size = os.path.getsize(self.file_path)
         if current_size != self.file_size:
             print(f"[INFO] File size changed for {self.file_path}: {self.file_size} -> {current_size}")
@@ -116,28 +143,70 @@ class Song:
         return False
         
     def add_genres(self, genres: list[str]):
+        """
+        Add genres to the song's metadata. This method will add the genres to the existing list of genres and remove duplicates.
+        It will also ensure that the genres are in lowercase and stripped of whitespace.
+
+        Args:
+            genres (list[str]): List of genres to add to the song's metadata.
+        """
         self.genres.extend(genres)
         self.genres = list(set(self.genres))
         
     def inc_play_count(self):
+        """
+        Increment the play count of the song and update the last played timestamp.
+        """
         self.play_count += 1
         self.last_played = datetime.now().isoformat()
         
     def maximize_play_count(self, play_count: int):
+        """
+        Set the play count to the maximum of the current play count and the provided play count.
+
+        Args:
+            play_count (int): The play count to maximize to.
+        """
         self.play_count = max(play_count, self.play_count)
         self.last_played = datetime.now().isoformat()
         
     def get_genres(self) -> str:
+        """
+        Get the genres of the song as a comma-separated string.
+        If no genres are available, return "Unknown".
+
+        Returns:
+            str: Comma-separated string of genres or "Unknown" if no genres are available.
+        """
         return ", ".join(self.genres) if self.genres else "Unknown"
     
     def get_artists(self) -> str:
+        """
+        Get the artists of the song as a comma-separated string.
+        This includes the album artist and any other artists.
+
+        Returns:
+            str: Comma-separated string of artists or "Unknown" if no artists are available.
+        """
         artists = [self.album_artist] + self.other_artists
         return ", ".join(artists) if artists else "Unknown"
     
     def get_title(self) -> str:
+        """
+        Get the title of the song.
+        
+        Returns:
+            str: Title of the song or "Unknown" if no title is available.
+        """
         return self.title if self.title else "Unknown"
     
-    def to_dict(self):
+    def to_dict(self) -> dict:
+        """
+        Convert the song metadata to a dictionary format.
+
+        Returns:
+            dict: Dictionary containing the song metadata.
+        """
         return {
             "file_path": self.file_path,
             "track_number": self.track_number,
@@ -164,7 +233,20 @@ class Song:
         }
     
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: dict) -> "Song":
+        """
+        Create a Song object from a dictionary of metadata.
+        This method is useful for loading song metadata from a database or other storage format.
+
+        Args:
+            data (dict): Dictionary containing the song metadata.
+
+        Returns:
+            Song: A new Song object with the metadata from the dictionary.
+            
+        Raises:
+            ValueError: If the dictionary does not contain the required metadata.
+        """
         song = cls()
         song.file_path = data.get("file_path", "")
         song.track_number = data.get("track_number", 0)
@@ -191,6 +273,10 @@ class Song:
         return song
 
     def pretty_print(self):
+        """
+        Print the song information in a readable format.
+        This method will print the song's title, album, artist, duration, release year, genres, play count, last played date,
+        """
         print(f"File Path: {self.file_path}")
         print(f"Title: {self.title}")
         print(f"Album: {self.album}")
@@ -207,7 +293,14 @@ class Song:
         print(f"Format: {self.format}")
         
     def get_hash(self) -> str:
-        """Generate a hash for the song based on its metadata."""
+        """
+        Generate a hash for the song based on its metadata.
+        This hash is used to uniquely identify the song and can be used for comparison purposes and is
+        subject to change if the metadata changes.
+
+        Returns:
+            str: The hash of the song.
+        """
         return hashlib.sha256(
             (f"{self.get_artists()}|{self.album}|{self.disc_number}.{self.track_number}|{self.title}").encode()
         ).hexdigest()

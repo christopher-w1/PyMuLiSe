@@ -15,8 +15,13 @@ class Album:
         self.album_path = album_path
         self.loudness = 0
         self.peak = 0
+        self.hash = sha256(album_path.encode()).hexdigest()
         
     def _retag_from_songs(self):
+        """
+        Update the album metadata based on the songs in the album.
+        This method will update the album name, artist, and release year based on the songs in the album.
+        """
         # Use most common album name
         albumname_count = {}
         play_count = 0
@@ -54,9 +59,18 @@ class Album:
         self.release_year = max([song.release_year for song in self.songs if song.release_year] + [self.release_year])
         
     def _sort_by_track_number(self):
+        """
+        Sort the songs in the album by track number and disc number.
+        """
         self.songs.sort(key=lambda x: (x.disc_number, x.track_number))
             
     def pretty_print(self):
+        """
+        Print the album information in a readable format.
+        This method will print the album name, artist, release year, play count, and the number of songs in the album,
+        as well as the details of each song in the album.
+        The details of each song include the title, artist(s), and release year.
+        """
         print(f"Album: {self.name}")
         print(f"Artist: {self.album_artist}")
         print(f"Year: {self.release_year}")
@@ -66,12 +80,24 @@ class Album:
             print(f"  - {song.title} by {song.get_artists()} ({song.release_year})")
         
     def get_hash(self) -> str:
-        hash_str = f"{self.name}{self.album_artist}{self.release_year}"
-        for song in self.songs:
-            hash_str += song.get_hash()
-        return sha256(hash_str.encode()).hexdigest()
+        """Return the initially generated hash of the album.
+        This hash was generated from the album path and is used to identify the album.
+
+        Returns:
+            str: The hash of the album.
+        """
+        return self.hash
         
     def add_song(self, song: Song):
+        """Add a song to the album and update metadata.
+        This method will also update the album name, artist, and release year
+
+        Args:
+            song (Song): The song to add to the album.
+
+        Raises:
+            TypeError: If the provided song is not an instance of the Song class.
+        """
         if isinstance(song, Song):
             self.songs.append(song)
             self._retag_from_songs()
@@ -80,6 +106,15 @@ class Album:
             raise TypeError("Expected a Song object")
         
     def album_folder_contains(self, song: Song) -> bool:
+        """Check if the song is part of the album based on the file path.
+        This method checks if the song's file path starts with the album's path.
+
+        Args:
+            song (Song): The song to check.
+
+        Returns:
+            bool: True if the song is part of the album, False otherwise.
+        """
         if song.file_path.startswith(self.album_path):
             return True
         return False

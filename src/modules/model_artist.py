@@ -27,9 +27,18 @@ class Artist:
         self.albums: list[Album] = []
         
     def get_hash(self) -> str:
+        """ 
+        Returns the hash of the artist. 
+        If the hash is not set, it generates a new one based on the artist's name.
+        """
+        if not self.hash:
+            self.hash = sha256(self.name.encode()).hexdigest()
         return self.hash
     
     def _update_most_common_name(self):
+        """
+        Update the artist name based on the most common name in the songs.
+        """
         if not self.songs:
             return
         names = {}
@@ -44,10 +53,31 @@ class Artist:
                 self.name = name
                 max_count = count
                 
+    def update_self(self) -> None:
+        """
+        Update the artist's metadata based on the songs and albums.
+        This method will update the artist's name, genres, and play count based on the songs and albums.
+        """
+        if not self.songs:
+            return
+        self.play_count = sum(song.play_count for song in self.songs)
+        self._update_most_common_name()
+                
     def force_update_name(self, name: str):
         self.name = name
         
     def is_artist_of(self, song: Song) -> bool:
+        """
+        Check if this artist is the artist of the given song.
+        This method checks if the artist's name matches the album artist or any of the other artists in the song.
+        It also handles common character replacements to ensure a match.
+
+        Args:
+            song (Song): The song to check.
+
+        Returns:
+            bool: True if this artist is the artist of the song, False otherwise.
+        """
         clean_artist_names = song.album_artist.split(",") if song.album_artist else []
         clean_artist_names += song.other_artists if song.other_artists else []
         clean_artist_names = [name.lower().strip() for name in clean_artist_names]
@@ -61,6 +91,12 @@ class Artist:
         return False
     
     def add_song(self, song: Song):
+        """
+        Add a song to the artist's list of songs and update the play count.
+
+        Args:
+            song (Song): The song to add.
+        """
         if not self.songs:
             self.songs = []
         if not song in self.songs:
