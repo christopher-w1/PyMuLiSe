@@ -1,0 +1,245 @@
+import os
+import time
+import json
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
+from modules.lastfm_client import LastFMClient
+from modules.utils import calculate_loudness
+from modules.model_song import Song
+from modules.model_album import Album
+from modules.model_artist import Artist
+from modules.utils import find_song_paths
+
+def fetch_lastfm_data_minimal(args: tuple[str, str, str]) -> tuple[str, int, list[str]]:
+    song_id, artist, title, api_key = args  # type: ignore
+    client = LastFMClient(api_key)
+    info = client.get_track_info(artist, title)
+    if not info:
+        return (song_id, 0, [])
+    
+    try:
+        playcount = int(info.get("playcount", 0))
+    except:
+        playcount = 0
+
+    tags_raw = info.get("toptags", {}).get("tag", [])
+    if isinstance(tags_raw, dict):
+        tags_raw = [tags_raw]
+    tags = [t.get("name", "").strip() for t in tags_raw if t.get("name")]
+
+    return (song_id, playcount, tags)
+
+def update_lastfm_inplace_with_processpool(songs: list[Song], max_workers: int = 6):
+    tasks = []
+    id_map = {}
+    api_key = os.getenv("LASTFM_API_KEY")
+    if not api_key:
+        raise ValueError("LASTFM_API_KEY environment variable is not set.")
+
+    for song in songs:
+        # Eindeutige ID → z. B. Pfad oder eigener Hash
+        song_id = str(song.file_path)
+        artist = (song.album_artist if not song.album_artist == "Various Artists"
+                  else None) or (song.other_artists[0] if song.other_artists else None)
+        title = song.title
+
+        if artist and title:
+            id_map[song_id] = song
+            tasks.append((song_id, artist, title, api_key))
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        results = executor.map(fetch_lastfm_data_minimal, tasks)
+
+    # Ergebnisse anwenden
+    for song_id, playcount, tags in results:
+        song = id_map.get(song_id)
+        if song:
+            song.lastfm_playcount = playcount
+            song.lastfm_tags = tags
+    
+def init_library():
+    is_new = False
+    if not os.path.exists("data"):
+        print("Creating library directory...")
+        os.makedirs("data", exist_ok=True)
+        is_new = True
+    # Make json files if they don't exist
+    if not os.path.exists("data/songs.json"):
+        with open("data/songs.json", "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+        is_new = True
+    if not os.path.exists("data/albums.json"):
+        with open("data/albums.json", "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+    if not os.path.exists("data/artists.json"):
+        is_new = True
+        with open("data/artists.json", "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+        is_new = True
+    return is_new
+
+
+def load_library() -> tuple[list[Song], list[Album], list[Artist]]:
+    print("Loading library from ./data...")
+    
+    # Check if the output directory exists
+    if init_library():
+        return [], [], []
+
+    # SONGS
+    with open("data/songs.json", "r", encoding="utf-8") as f:
+        song_dicts = json.load(f)
+    song_objects = [Song.from_dict(d) for d in song_dicts]
+    song_map = {s.get_hash(): s for s in song_objects}
+    print(f"✓ Loaded {len(song_objects)} songs")
+
+    # ALBUMS
+    with open("data/albums.json", "r", encoding="utf-8") as f:
+        album_dicts = json.load(f)
+    album_objects = [Album.from_dict(d, song_map) for d in album_dicts]
+    album_map = {a.hash: a for a in album_objects}
+    print(f"✓ Loaded {len(album_objects)} albums")
+
+    # ARTISTS
+    with open("data/artists.json", "r", encoding="utf-8") as f:
+        artist_dicts = json.load(f)
+    artist_objects = [Artist.from_dict(d, song_map, album_map) for d in artist_dicts]
+    print(f"✓ Loaded {len(artist_objects)} artists")
+
+    print("✓ Library successfully loaded.")
+
+    return song_objects, album_objects, artist_objects
+
+
+def scan_library(verbose: bool = False):
+    music_dir = os.getenv("MUSIC_DIR")
+    if not music_dir:
+        raise ValueError("MUSIC_DIR environment variable is not set.")
+
+    was_updated = False
+
+    # Load existing library
+    existing_songs, existing_albums, existing_artists = load_library()
+    existing_song_map = {s.get_hash(): s for s in existing_songs}
+    existing_paths = {str(s.file_path) for s in existing_songs}
+
+    # Scan new files
+    song_paths = find_song_paths(music_dir)
+    print(f"Scanning {len(song_paths)} songs from disk...")
+
+    updated_songs: list[Song] = []
+    new_songs: list[Song] = []
+
+    for i, song_path in enumerate(song_paths):
+        if song_path in existing_paths:
+            # Existing file -> skip analysis
+            existing_song = next(s for s in existing_songs if str(s.file_path) == song_path)
+            updated_songs.append(existing_song)
+        else:
+            # New file -> create new Song object
+            new_song = Song(song_path, skip_analysis=True)
+            is_new = True
+            was_updated = True
+            # Check if the song already exists in the library and was moved
+            for existing_song in existing_songs:
+                if new_song.get_hash() == existing_song.get_hash():
+                    print(f"Song {new_song.file_path} already exists in library as {existing_song.file_path}")
+                    print(f"Assuming the song was moved, updating file path...")
+                    existing_song.file_path = new_song.file_path
+                    existing_songs.remove(existing_song)
+                    updated_songs.append(existing_song)
+                    is_new = False
+                    break
+            if is_new:
+                new_songs.append(new_song)
+                updated_songs.append(new_song)
+
+        if verbose:
+            print(f"[{i + 1}/{len(song_paths)}] {song_path} {'(new)' if song_path not in existing_paths else ''}")
+
+          
+    # Remove songs that were deleted
+    for existing_song in existing_songs:
+        if str(existing_song.file_path) not in song_paths:
+            print(f"Song {existing_song.file_path} was deleted")
+            updated_songs.remove(existing_song)
+            was_updated = True
+            
+            
+    # Calculate loudness and peak for songs without analysis
+    songs_to_analyze = [s for s in updated_songs if not s.loudness]
+    if songs_to_analyze:
+        print(f"Calculating loudness for {len(songs_to_analyze)} songs...")
+        paths_to_analyze = [str(song.file_path) for song in songs_to_analyze]
+        with ProcessPoolExecutor() as executor:
+            results = list(executor.map(calculate_loudness, paths_to_analyze))
+        for song, (loudness, peak) in zip(songs_to_analyze, results):
+            if loudness is not None:
+                song.loudness = loudness
+                song.peak = peak
+                print(f"✓ {song.title}: {loudness:.2f} LUFS, Peak: {peak:.2f} dBFS")
+            else:
+                print(f"✗ {song.title}: Loudness analysis failed")
+        was_updated = True
+        
+    song_without_lastfm = [s for s in updated_songs if not s.lastfm_playcount or not s.lastfm_tags]
+    if song_without_lastfm:
+        print(f"Updating Last.fm data for {len(song_without_lastfm)} songs...")
+        update_lastfm_inplace_with_processpool(song_without_lastfm)
+        was_updated = True
+        
+    if not was_updated:
+        print("Library is up to date. No changes detected.")
+        return
+                
+    # Map songs to albums
+    album_paths = list(set(os.path.dirname(path) for path in song_paths))
+    album_objects: list[Album] = []
+    for album_path in album_paths:
+        album = Album(album_path)
+        songs_in_album = [
+            s for s in updated_songs
+            if album_path.lower().replace("\\", "/") in str(s.file_path).lower().replace("\\", "/")
+        ]
+        for song in songs_in_album:
+            album.add_song(song)
+        album_objects.append(album)
+    album_map = {a.hash: a for a in album_objects}
+
+    # Map songs to artists
+    artist_dict: dict[str, Artist] = {}
+    for song in updated_songs:
+        artist_names_raw = []
+        if song.album_artist:
+            artist_names_raw.append(song.album_artist)
+        artist_names_raw.extend(song.other_artists)
+
+        for raw_name in artist_names_raw:
+            simple_name = Artist.get_simple_name(raw_name)
+            if simple_name not in artist_dict:
+                artist_dict[simple_name] = Artist(raw_name)
+            artist_dict[simple_name].add_song(song)
+
+    # Map albums to artists
+    for artist in artist_dict.values():
+        for album in album_objects:
+            for song in album.songs:
+                if song in artist.songs and album not in artist.albums:
+                    artist.albums.append(album)
+
+    # Speichern
+    print("Saving updated library...")
+    os.makedirs("output", exist_ok=True)
+
+    with open("data/songs.json", "w", encoding="utf-8") as f:
+        json.dump([s.to_dict() for s in updated_songs], f, ensure_ascii=False, indent=2)
+
+    with open("data/albums.json", "w", encoding="utf-8") as f:
+        json.dump([a.to_dict() for a in album_objects], f, ensure_ascii=False, indent=2)
+
+    with open("data/artists.json", "w", encoding="utf-8") as f:
+        json.dump([a.to_dict() for a in artist_dict.values()], f, ensure_ascii=False, indent=2)
+
+    print(f"✓ Library updated successfully with {len(new_songs)} new songs.")
+
+
