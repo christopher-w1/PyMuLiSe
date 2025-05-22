@@ -46,6 +46,8 @@ def calculate_loudness(file_path: str) -> tuple[Optional[float], Optional[float]
     return loudness, peak
 
 def find_cover_art(file_path: str) -> str:
+    if not os.path.exists(file_path):
+        return ""
     directory = os.path.dirname(file_path)
     image_extensions = [".jpg", ".jpeg", ".png", ".webp"]
     preferred_names = ["cover", "folder", "front", "album"]
