@@ -45,6 +45,7 @@ class Song:
         self.peak = 0
         self.lastfm_playcount = 0
         self.lastfm_tags = []
+        self.hash = ""
         
         if not file_path:
             return
@@ -233,6 +234,7 @@ class Song:
             "peak": self.peak,
             "lastfm_playcount": self.lastfm_playcount,
             "lastfm_tags": self.lastfm_tags,
+            "hash": self.hash
         }
     
     @classmethod
@@ -273,6 +275,7 @@ class Song:
         song.peak = data.get("peak", 0)
         song.lastfm_playcount = data.get("lastfm_playcount", 0)
         song.lastfm_tags = data.get("lastfm_tags", [])
+        song.hash = data.get("hash", "")
         return song
 
     def pretty_print(self):
@@ -297,16 +300,17 @@ class Song:
         
     def get_hash(self) -> str:
         """
-        Generate a hash for the song based on its metadata.
-        This hash is used to uniquely identify the song and can be used for comparison purposes and is
-        subject to change if the metadata changes.
+        Return the hash of the song.
+        This hash is generated from the song's metadata and is used to uniquely identify the song.
 
         Returns:
             str: The hash of the song.
         """
-        return hashlib.sha256(
-            (f"{self.get_artists()}|{self.album}|{self.disc_number}.{self.track_number}|{self.title}").encode()
-        ).hexdigest()
+        if not self.hash: 
+            self.hash = hashlib.sha256(
+                (f"{self.get_artists()}|{self.album}|{self.disc_number}.{self.track_number}|{self.title}").encode()
+            ).hexdigest()
+        return self.hash
         
     def __str__(self):
         return f"{self.title} by {self.album_artist} from the album {self.album} ({self.duration} seconds)"
