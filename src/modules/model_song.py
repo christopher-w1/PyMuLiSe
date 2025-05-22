@@ -5,7 +5,7 @@ from mutagen.flac import FLAC
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from datetime import datetime
-from modules.utils import find_cover_art, calculate_loudness
+from modules.filesys_utils import find_cover_art, calculate_loudness
 
 class Song:
     def __init__(self, file_path: str = "", skip_analysis: bool = False):

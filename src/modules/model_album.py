@@ -1,6 +1,6 @@
 from modules.model_song import Song
 from hashlib import sha256
-from modules.utils import find_cover_art
+from modules.filesys_utils import find_cover_art
 
 class Album:
     def __init__(self, album_path: str):
