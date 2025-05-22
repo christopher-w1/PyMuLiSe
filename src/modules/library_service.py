@@ -71,6 +71,24 @@ class LibraryService:
                     return song
         return None
     
+    async def get_song_by_metadata(self, metadata: dict[str, str]) -> Song | None:
+        artist = metadata.get("artist", None)
+        album = metadata.get("album", None)
+        title = metadata.get("title", None)
+        track_number = metadata.get("track_number", None)
+        match = None
+        async with self._lock:
+            matches = [
+                song for song in self.library_snapshot[0]
+                if (artist is None or artist in song.get_artists()) and
+                   (album is None or song.album == album) and
+                   (title is None or song.title == title) and
+                   (track_number is None or song.track_number == track_number)
+            ]
+            if matches:
+                match = matches[0]
+        return match
+    
     async def search_song(self, search_term: str) -> list[Song]:
         async with self._lock:
             matches: list[tuple[float, Song]] = []

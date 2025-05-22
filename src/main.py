@@ -131,3 +131,30 @@ async def get_song_file(request: Request):
         filename=os.path.basename(file_path)
     )
 
+
+@app.post("/get_song_file_from_metadata")
+async def get_song_file_from_metadata(request: Request):
+    body = await request.json()
+    access_token = body.get("access_token")
+    if not access_token or not check_access_token(access_token):
+        raise HTTPException(status_code=401, detail="Invalid access token")
+
+    metadata = body.get("metadata")
+    if not metadata:
+        raise HTTPException(status_code=400, detail="Missing metadata")
+    
+    if not isinstance(metadata, dict):
+        raise HTTPException(status_code=400, detail="Metadata must be a dictionary")
+
+    song = await libraryService.get_song_by_metadata(metadata)
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found in library")
+
+    file_path = song.file_path
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Song file not found")
+
+    # MIME-Type automatisch bestimmen
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if mime_type is None:
+        mime_type = "application/octet-stream"
