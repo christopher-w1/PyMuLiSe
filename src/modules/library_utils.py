@@ -31,9 +31,10 @@ def fetch_lastfm_data_minimal(args: Tuple[str, str, str, str]) -> Tuple[str, int
     return (song_id, playcount, tags)
 
 
-def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: float = 0.21):
+def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: float = 0.25) -> None:
     """
-    Holt LastFM-Daten seriell mit Ratelimit (max. 5 Requests/Sekunde) und zeigt Fortschritt an.
+    Get Last.fm data for a list of songs with throttling.
+    :param songs: List of Song objects to update.
     """
     api_key = os.getenv("LASTFM_API_KEY")
     if not api_key:
@@ -53,12 +54,15 @@ def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: f
             tasks.append((song_id, artist, title, api_key))
 
     for args in tqdm(tasks, desc="Fetching LastFM data", unit="song"):
+        start_time = time.time()
         song_id, playcount, tags = fetch_lastfm_data_minimal(args)
         song = id_map.get(song_id)
         if song:
             song.lastfm_playcount = playcount
             song.lastfm_tags = tags
-        time.sleep(delay_per_request)
+        time_taken = time.time() - start_time
+        if time_taken < delay_per_request:
+            time.sleep(delay_per_request - time_taken)
     
 def init_library():
     is_new = False
@@ -214,6 +218,15 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
             album.add_song(song)
         album_objects.append(album)
     album_map = {a.hash: a for a in album_objects}
+    
+    # Guess loudness and peak for songs without analysis
+    for album in album_objects:
+        if album.loudness:
+            for song in album.songs:
+                if not song.loudness:
+                    song.loudness = album.loudness
+                if not song.peak:
+                    song.peak = album.peak
 
     # Map songs to artists
     artist_dict: dict[str, Artist] = {}
