@@ -29,7 +29,7 @@ if [ ! -f "$ENV_VARS_FILE" ]; then
     read -p "Enter your REST_API_PORT (e.g. 8080): " port
 
     echo "export LASTFM_API_KEY=\"$lastfm\"" > "$ENV_VARS_FILE"
-    echo "export ACCESS_TOKEN=\"$pymulise\"" > "$ENV_VARS_FILE"
+    echo "export ACCESS_TOKEN=\"$pymulise\"" >> "$ENV_VARS_FILE"
     echo "export MUSIC_DIR=\"$music\"" >> "$ENV_VARS_FILE"
     echo "export REST_API_PORT=\"$port\"" >> "$ENV_VARS_FILE"
 
