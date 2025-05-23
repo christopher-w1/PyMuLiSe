@@ -1,5 +1,8 @@
 import os
 import json
+import time
+from tqdm import tqdm
+from typing import List, Tuple
 from concurrent.futures import ProcessPoolExecutor
 from modules.lastfm_client import LastFMClient
 from modules.filesys_utils import calculate_loudness
@@ -8,8 +11,8 @@ from modules.model_album import Album
 from modules.model_artist import Artist
 from modules.filesys_utils import find_song_paths
 
-def fetch_lastfm_data_minimal(args: tuple[str, str, str]) -> tuple[str, int, list[str]]:
-    song_id, artist, title, api_key = args  # type: ignore
+def fetch_lastfm_data_minimal(args: Tuple[str, str, str, str]) -> Tuple[str, int, List[str]]:
+    song_id, artist, title, api_key = args
     client = LastFMClient(api_key)
     info = client.get_track_info(artist, title)
     if not info:
@@ -27,17 +30,21 @@ def fetch_lastfm_data_minimal(args: tuple[str, str, str]) -> tuple[str, int, lis
 
     return (song_id, playcount, tags)
 
-def update_lastfm_inplace_with_processpool(songs: list[Song], max_workers: int = 6):
-    tasks = []
-    id_map = {}
+
+def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: float = 0.21):
+    """
+    Holt LastFM-Daten seriell mit Ratelimit (max. 5 Requests/Sekunde) und zeigt Fortschritt an.
+    """
     api_key = os.getenv("LASTFM_API_KEY")
     if not api_key:
         raise ValueError("LASTFM_API_KEY environment variable is not set.")
 
+    id_map = {}
+    tasks = []
+
     for song in songs:
-        # Eindeutige ID → z. B. Pfad oder eigener Hash
         song_id = str(song.file_path)
-        artist = (song.album_artist if not song.album_artist == "Various Artists"
+        artist = (song.album_artist if song.album_artist != "Various Artists"
                   else None) or (song.other_artists[0] if song.other_artists else None) or "Various Artists"
         title = song.title
 
@@ -45,15 +52,13 @@ def update_lastfm_inplace_with_processpool(songs: list[Song], max_workers: int =
             id_map[song_id] = song
             tasks.append((song_id, artist, title, api_key))
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        results = executor.map(fetch_lastfm_data_minimal, tasks)
-
-    # Ergebnisse anwenden
-    for song_id, playcount, tags in results:
+    for args in tqdm(tasks, desc="Fetching LastFM data", unit="song"):
+        song_id, playcount, tags = fetch_lastfm_data_minimal(args)
         song = id_map.get(song_id)
         if song:
             song.lastfm_playcount = playcount
             song.lastfm_tags = tags
+        time.sleep(delay_per_request)
     
 def init_library():
     is_new = False
@@ -189,7 +194,7 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
     song_without_lastfm = [s for s in updated_songs if not s.lastfm_playcount or not s.lastfm_tags]
     if song_without_lastfm:
         print(f"Updating Last.fm data for {len(song_without_lastfm)} songs...")
-        update_lastfm_inplace_with_processpool(song_without_lastfm)
+        update_lastfm_serial_with_throttling(song_without_lastfm)
         was_updated = True
         
     if not was_updated:
