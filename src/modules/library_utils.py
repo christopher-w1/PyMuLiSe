@@ -163,6 +163,9 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
             updated_songs.remove(existing_song)
             was_updated = True
             
+    if was_updated:
+        with open("data/songs.json", "w", encoding="utf-8") as f:
+            json.dump([s.to_dict() for s in updated_songs], f, ensure_ascii=False, indent=2)
             
     # Calculate loudness and peak for songs without analysis
     songs_to_analyze = [s for s in updated_songs if not s.loudness]
@@ -179,7 +182,10 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
             else:
                 print(f"✗ {song.title}: Loudness analysis failed")
         was_updated = True
-        
+        with open("data/songs.json", "w", encoding="utf-8") as f:
+            json.dump([s.to_dict() for s in updated_songs], f, ensure_ascii=False, indent=2)
+    
+    
     song_without_lastfm = [s for s in updated_songs if not s.lastfm_playcount or not s.lastfm_tags]
     if song_without_lastfm:
         print(f"Updating Last.fm data for {len(song_without_lastfm)} songs...")
