@@ -57,6 +57,8 @@ def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: f
         start_time = time.time()
         song_id, playcount, tags = fetch_lastfm_data_minimal(args)
         song = id_map.get(song_id)
+        if not playcount or not tags:
+            print(f"Last.fm data incomplete for {song_id}: playcount={playcount}, tags={tags}")
         if song:
             song.lastfm_playcount = playcount
             song.lastfm_tags = tags
