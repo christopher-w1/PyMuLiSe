@@ -198,7 +198,7 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
             json.dump([s.to_dict() for s in updated_songs], f, ensure_ascii=False, indent=2)
     
     
-    song_without_lastfm = [s for s in updated_songs if not s.lastfm_playcount or not s.lastfm_tags]
+    song_without_lastfm = [s for s in updated_songs if not s.lastfm_playcount]
     if song_without_lastfm:
         print(f"Updating Last.fm data for {len(song_without_lastfm)} songs...")
         update_lastfm_serial_with_throttling(song_without_lastfm)
