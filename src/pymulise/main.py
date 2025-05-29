@@ -190,7 +190,10 @@ async def root():
                 "/get_song_file_from_metadata"
             ]}
         
-if __name__ == "__main__":
+def main():
     import uvicorn
     rest_api_port = int(os.getenv("REST_API_PORT", 8000))
     uvicorn.run(app, host="127.0.0.1", port=rest_api_port)
+
+if __name__ == "__main__":
+    main()
