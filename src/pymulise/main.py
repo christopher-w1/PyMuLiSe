@@ -62,8 +62,8 @@ async def get_artists(request: Request):
     access_token = body.get("access_token")
     if not access_token or not check_access_token(access_token):
         raise HTTPException(status_code=401, detail="Invalid access token")
-    # TODO: Prüfe access_token, implementiere Logik
-    return {"artists": []}
+    _, _, all_artists = await libraryService.get_snapshot()
+    return {"artists": [artist.to_dict() for artist in all_artists]}
 
 
 @app.post("/get_albums")
@@ -72,8 +72,20 @@ async def get_albums(request: Request):
     access_token = body.get("access_token")
     if not access_token or not check_access_token(access_token):
         raise HTTPException(status_code=401, detail="Invalid access token")
-    # TODO: Prüfe access_token, implementiere Logik
-    return {"albums": []}
+    _, all_albums, _ = await libraryService.get_snapshot()
+    return {"albums": [album.to_dict() for album in all_albums]}
+
+
+@app.post("/get_full_library")
+async def get_library(request: Request):
+    body = await request.json()
+    access_token = body.get("access_token")
+    if not access_token or not check_access_token(access_token):
+        raise HTTPException(status_code=401, detail="Invalid access token")
+    all_songs, all_albums, all_artists = await libraryService.get_snapshot()
+    return {"songs": [song.to_dict() for song in all_songs],
+            "artists": [artist.to_dict() for artist in all_artists],
+            "albums": [album.to_dict() for album in all_albums]}
 
 
 @app.post("/get_song_details")
