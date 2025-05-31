@@ -27,6 +27,7 @@
 
   <script>
     const coverCache = new Map();
+    const audioSrcCache = new Map();
 
     async function postData(endpoint, body) {
       const token = document.getElementById("token").value;
@@ -59,18 +60,6 @@
       const url = URL.createObjectURL(blob);
       coverCache.set(songHash, url);
       return url;
-    }
-
-    function getSongFileUrl(songHash, accessToken) {
-      const blob = new Blob([JSON.stringify({ song_hash: songHash, access_token: accessToken })], { type: 'application/json' });
-      const request = new Request('/get_song_file', {
-        method: 'POST',
-        body: blob,
-        headers: { 'Content-Type': 'application/json' }
-      });
-      return fetch(request)
-        .then(res => res.ok ? res.blob() : null)
-        .then(blob => blob ? URL.createObjectURL(blob) : null);
     }
 
     async function loadLibrary() {
@@ -118,14 +107,25 @@
               <p class="text-sm text-gray-400">${formatDuration(song.duration)}</p>
               <p class="text-xs text-gray-500">${song.genres.join(", ")}</p>
               <p class="text-xs">Plays: ${song.play_count}</p>
-              <audio controls class="w-full mt-1" id="player-${song.hash}"></audio>
+              <audio controls class="w-full mt-1" id="player-${song.hash}" data-song-hash="${song.hash}"></audio>
             `;
             songContainer.appendChild(songCard);
 
-            getSongFileUrl(song.hash, token).then(url => {
-              if (url) {
-                const player = document.getElementById(`player-${song.hash}`);
-                player.src = url;
+            const player = songCard.querySelector("audio");
+            player.addEventListener("play", async () => {
+              if (!audioSrcCache.has(song.hash)) {
+                const res = await fetch("/get_song_file", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ song_hash: song.hash, access_token: token })
+                });
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  audioSrcCache.set(song.hash, url);
+                  player.src = url;
+                  player.play();
+                }
               }
             });
           }
