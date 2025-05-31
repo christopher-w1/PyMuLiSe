@@ -1,5 +1,5 @@
 from modules.model_song import Song
-from src.modules.filesys_utils import find_song_paths
+from modules.filesys_utils import find_song_paths
 music_dir = "./music"
 
 
