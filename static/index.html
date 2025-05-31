@@ -88,13 +88,33 @@
           albumDiv.className = "bg-gray-800 p-4 rounded shadow mb-2";
 
           const albumHeader = document.createElement("button");
-          albumHeader.className = "w-full text-left text-xl font-semibold text-white hover:text-blue-400 mb-2";
-          albumHeader.textContent = album.name;
+          albumHeader.className = "w-full text-left text-xl font-semibold text-white hover:text-blue-400 mb-2 flex items-center gap-4";
+
+          const coverImg = document.createElement("img");
+          coverImg.alt = "Cover";
+          coverImg.className = "w-24 h-24 rounded mb-2 hidden"; // zunächst versteckt
+
+          const albumText = document.createElement("span");
+          albumText.textContent = album.name;
+
+          albumHeader.appendChild(coverImg);
+          albumHeader.appendChild(albumText);
 
           const songContainer = document.createElement("div");
           songContainer.className = "flex flex-wrap gap-4 hidden";
 
-          albumHeader.onclick = () => songContainer.classList.toggle("hidden");
+          albumHeader.onclick = async () => {
+            songContainer.classList.toggle("hidden");
+
+            // Cover nur beim ersten Öffnen laden
+            if (!coverImg.src && album.songs.length > 0) {
+              const url = await fetchCoverArt(album.songs[0], token);
+              if (url) {
+                coverImg.src = url;
+                coverImg.classList.remove("hidden");
+              }
+            }
+          };
 
           for (const songHash of album.songs) {
             const song = songMap.get(songHash);
@@ -138,19 +158,6 @@
 
           albumDiv.appendChild(albumHeader);
           albumDiv.appendChild(songContainer);
-
-          if (album.songs.length > 0) {
-            fetchCoverArt(album.songs[0], token).then(url => {
-              if (url) {
-                const img = document.createElement("img");
-                img.src = url;
-                img.alt = "Cover";
-                img.className = "w-24 h-24 rounded mb-2";
-                albumHeader.prepend(img);
-              }
-            });
-          }
-
           artistDiv.appendChild(albumDiv);
         }
 
