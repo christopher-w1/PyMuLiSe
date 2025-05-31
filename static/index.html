@@ -23,11 +23,18 @@
 
     <!-- Anzeigecontainer -->
     <div id="output" class="space-y-4"></div>
+    <div id="loadingIndicator" class="text-center py-4 hidden">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
   </div>
 
   <script>
     const coverCache = new Map();
     const audioSrcCache = new Map();
+    let libraryData = null;
+    let visibleArtists = 5; // Initial number of artists to show
+    const artistsPerLoad = 5; // Additional artists to load on scroll
+    let isLoading = false;
 
     async function postData(endpoint, body) {
       const token = document.getElementById("token").value;
@@ -62,108 +69,171 @@
       return url;
     }
 
-    async function loadLibrary() {
+    function renderArtist(artist, index) {
       const token = document.getElementById("token").value;
-      const { songs, albums, artists } = await postData("/get_full_library", {});
-      const container = document.getElementById("output");
-      container.innerHTML = "";
-
+      const { songs, albums } = libraryData;
       const songMap = new Map();
       songs.forEach(song => songMap.set(song.hash, song));
 
-      for (const artist of artists) {
-        const artistDiv = document.createElement("div");
-        artistDiv.className = "mb-6";
+      const artistDiv = document.createElement("div");
+      artistDiv.className = "mb-6";
+      artistDiv.dataset.artistIndex = index;
 
-        const artistHeader = document.createElement("h2");
-        artistHeader.className = "text-2xl font-bold mb-2 text-blue-300";
-        artistHeader.textContent = artist.name;
-        artistDiv.appendChild(artistHeader);
+      const artistHeader = document.createElement("h2");
+      artistHeader.className = "text-2xl font-bold mb-2 text-blue-300";
+      artistHeader.textContent = artist.name;
+      artistDiv.appendChild(artistHeader);
 
-        for (const albumHash of artist.albums) {
-          const album = albums.find(a => a.hash === albumHash);
-          if (!album) continue;
+      for (const albumHash of artist.albums) {
+        const album = albums.find(a => a.hash === albumHash);
+        if (!album) continue;
 
-          const albumDiv = document.createElement("div");
-          albumDiv.className = "bg-gray-800 p-4 rounded shadow mb-2";
+        const albumDiv = document.createElement("div");
+        albumDiv.className = "bg-gray-800 p-4 rounded shadow mb-2";
 
-          const albumHeader = document.createElement("button");
-          albumHeader.className = "w-full text-left text-xl font-semibold text-white hover:text-blue-400 mb-2 flex items-center gap-4";
+        const albumHeader = document.createElement("button");
+        albumHeader.className = "w-full text-left text-xl font-semibold text-white hover:text-blue-400 mb-2 flex items-center gap-4";
 
-          const coverImg = document.createElement("img");
-          coverImg.alt = "Cover";
-          coverImg.className = "w-24 h-24 rounded mb-2 hidden"; // zunächst versteckt
+        const coverImg = document.createElement("img");
+        coverImg.alt = "Cover";
+        coverImg.className = "w-24 h-24 rounded mb-2 hidden";
 
-          const albumText = document.createElement("span");
-          albumText.textContent = album.name;
+        const albumText = document.createElement("span");
+        albumText.textContent = album.name;
 
-          albumHeader.appendChild(coverImg);
-          albumHeader.appendChild(albumText);
+        albumHeader.appendChild(coverImg);
+        albumHeader.appendChild(albumText);
 
-          const songContainer = document.createElement("div");
-          songContainer.className = "flex flex-wrap gap-4 hidden";
+        const songContainer = document.createElement("div");
+        songContainer.className = "flex flex-wrap gap-4 hidden";
 
-          albumHeader.onclick = async () => {
-            songContainer.classList.toggle("hidden");
+        albumHeader.onclick = async () => {
+          songContainer.classList.toggle("hidden");
 
-            // Cover nur beim ersten Öffnen laden
-            if (!coverImg.src && album.songs.length > 0) {
-              const url = await fetchCoverArt(album.songs[0], token);
-              if (url) {
-                coverImg.src = url;
-                coverImg.classList.remove("hidden");
+          if (!coverImg.src && album.songs.length > 0) {
+            const url = await fetchCoverArt(album.songs[0], token);
+            if (url) {
+              coverImg.src = url;
+              coverImg.classList.remove("hidden");
+            }
+          }
+        };
+
+        for (const songHash of album.songs) {
+          const song = songMap.get(songHash);
+          if (!song) continue;
+
+          const songCard = document.createElement("div");
+          songCard.className = "bg-gray-700 p-3 rounded w-48 flex-shrink-0";
+          songCard.innerHTML = `
+            <p class="font-medium truncate">${song.track_number}. ${song.title}</p>
+            <p class="text-sm text-gray-400">${formatDuration(song.duration)}</p>
+            <p class="text-xs text-gray-500">${song.genres.join(", ")}</p>
+            <p class="text-xs">Plays: ${song.play_count}</p>
+            <audio controls class="w-full mt-1" id="player-${song.hash}" data-song-hash="${song.hash}"></audio>
+          `;
+          songContainer.appendChild(songCard);
+
+          const player = songCard.querySelector("audio");
+          player.addEventListener("play", async () => {
+            if (!audioSrcCache.has(song.hash)) {
+              const res = await fetch("/get_song_file", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  song_hash: song.hash,
+                  access_token: token,
+                  transcode: true,
+                  format: "m4a",
+                  bitrate: 160
+                })
+              });
+              if (res.ok) {
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                audioSrcCache.set(song.hash, url);
+                player.src = url;
+                player.play();
               }
             }
-          };
-
-          for (const songHash of album.songs) {
-            const song = songMap.get(songHash);
-            if (!song) continue;
-
-            const songCard = document.createElement("div");
-            songCard.className = "bg-gray-700 p-3 rounded w-48 flex-shrink-0";
-            songCard.innerHTML = `
-              <p class="font-medium truncate">${song.track_number}. ${song.title}</p>
-              <p class="text-sm text-gray-400">${formatDuration(song.duration)}</p>
-              <p class="text-xs text-gray-500">${song.genres.join(", ")}</p>
-              <p class="text-xs">Plays: ${song.play_count}</p>
-              <audio controls class="w-full mt-1" id="player-${song.hash}" data-song-hash="${song.hash}"></audio>
-            `;
-            songContainer.appendChild(songCard);
-
-            const player = songCard.querySelector("audio");
-            player.addEventListener("play", async () => {
-              if (!audioSrcCache.has(song.hash)) {
-                const res = await fetch("/get_song_file", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    song_hash: song.hash,
-                    access_token: token,
-                    transcode: true,
-                    format: "m4a",
-                    bitrate: 160
-                  })
-                });
-                if (res.ok) {
-                  const blob = await res.blob();
-                  const url = URL.createObjectURL(blob);
-                  audioSrcCache.set(song.hash, url);
-                  player.src = url;
-                  player.play();
-                }
-              }
-            });
-          }
-
-          albumDiv.appendChild(albumHeader);
-          albumDiv.appendChild(songContainer);
-          artistDiv.appendChild(albumDiv);
+          });
         }
 
-        container.appendChild(artistDiv);
+        albumDiv.appendChild(albumHeader);
+        albumDiv.appendChild(songContainer);
+        artistDiv.appendChild(albumDiv);
+      }
+
+      return artistDiv;
+    }
+
+    function loadMoreArtists() {
+      if (isLoading || !libraryData || visibleArtists >= libraryData.artists.length) {
+        document.getElementById('loadingIndicator').classList.add('hidden');
+        return;
+      }
+
+      isLoading = true;
+      document.getElementById('loadingIndicator').classList.remove('hidden');
+
+      // Use setTimeout to allow UI to update before heavy rendering
+      setTimeout(() => {
+        const container = document.getElementById("output");
+        const endIndex = Math.min(visibleArtists + artistsPerLoad, libraryData.artists.length);
+        
+        for (let i = visibleArtists; i < endIndex; i++) {
+          const artist = libraryData.artists[i];
+          container.appendChild(renderArtist(artist, i));
+        }
+        
+        visibleArtists = endIndex;
+        isLoading = false;
+        
+        if (visibleArtists >= libraryData.artists.length) {
+          document.getElementById('loadingIndicator').classList.add('hidden');
+        } else {
+          document.getElementById('loadingIndicator').classList.remove('hidden');
+        }
+      }, 100);
+    }
+
+    // Intersection Observer for infinite scroll
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        loadMoreArtists();
+      }
+    }, { threshold: 0.1 });
+
+    async function loadLibrary() {
+      const container = document.getElementById("output");
+      container.innerHTML = "";
+      visibleArtists = 5;
+      
+      document.getElementById('loadingIndicator').classList.remove('hidden');
+      
+      try {
+        libraryData = await postData("/get_full_library", {});
+        
+        container.innerHTML = "";
+        const initialArtists = libraryData.artists.slice(0, visibleArtists);
+        
+        initialArtists.forEach((artist, index) => {
+          container.appendChild(renderArtist(artist, index));
+        });
+        
+        // Setup observer after initial load
+        observer.observe(document.getElementById('loadingIndicator'));
+      } catch (error) {
+        console.error("Error loading library:", error);
+      } finally {
+        document.getElementById('loadingIndicator').classList.add('hidden');
       }
     }
+
+    // Initialize observer when page loads
+    window.addEventListener('DOMContentLoaded', () => {
+      observer.observe(document.getElementById('loadingIndicator'));
+    });
   </script>
 </body>
 </html>
