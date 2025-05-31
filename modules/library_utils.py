@@ -204,7 +204,7 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
         update_lastfm_serial_with_throttling(song_without_lastfm)
         was_updated = True
         
-    if not was_updated:
+    if not was_updated and False:
         print("Library is up to date. No changes detected.")
         return existing_songs, existing_albums, existing_artists
                 
@@ -235,13 +235,14 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
     artist_dict: dict[str, Artist] = {}
     for song in updated_songs:
         artist_names_raw = []
-        if song.album_artist:
-            artist_names_raw.append(song.album_artist)
-        artist_names_raw.extend(song.other_artists)
+        for artist_name in [song.album_artist] + song.other_artists:
+            if artist_name and not artist_name in artist_names_raw:
+                artist_names_raw.append(song.album_artist)
 
         for raw_name in artist_names_raw:
             simple_name = Artist.get_simple_name(raw_name)
-            if simple_name not in artist_dict:
+            if simple_name not in artist_dict.keys():
+                print(f"{simple_name} not in Artist keys, adding...")
                 artist_dict[simple_name] = Artist(raw_name)
             artist_dict[simple_name].add_song(song)
     artist_objects = list(artist_dict.values())
