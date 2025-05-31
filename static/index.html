@@ -117,7 +117,13 @@
                 const res = await fetch("/get_song_file", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ song_hash: song.hash, access_token: token })
+                  body: JSON.stringify({
+                    song_hash: song.hash,
+                    access_token: token,
+                    transcode: true,
+                    format: "ogg",
+                    bitrate: 160
+                  })
                 });
                 if (res.ok) {
                   const blob = await res.blob();

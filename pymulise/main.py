@@ -2,11 +2,13 @@ import os, mimetypes, io
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import BackgroundTasks
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi import Query
 from PIL import Image
 from modules.library_service import LibraryService
+from modules.filesys_transcoder import Transcoding
 from contextlib import asynccontextmanager
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,7 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 def check_access_token(token: str) -> bool:
     valid_token = os.getenv("ACCESS_TOKEN")
     if not valid_token:
@@ -38,6 +39,17 @@ def check_access_token(token: str) -> bool:
     print(f"Provided token: {token}")
     return token == valid_token
 
+def schedule_cleanup(path: str, delay_sec: int = 600):
+    import threading, time
+    def cleanup():
+        time.sleep(delay_sec)
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                print(f"Deleted transcoded file: {path}")
+        except Exception as e:
+            print(f"Cleanup failed: {e}")
+    threading.Thread(target=cleanup, daemon=True).start()
 
 @app.post("/get_songs")
 async def get_songs(request: Request):
@@ -153,7 +165,7 @@ async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, l
 
 
 @app.post("/get_song_file")
-async def get_song_file(request: Request):
+async def get_song_file(request: Request, background_tasks: BackgroundTasks):
     body = await request.json()
     access_token = body.get("access_token")
     if not access_token or not check_access_token(access_token):
@@ -163,23 +175,48 @@ async def get_song_file(request: Request):
     if not song_hash:
         raise HTTPException(status_code=400, detail="Missing song hash")
 
+    transcode = body.get("transcode", False)
+    format_override = body.get("format", "mp3")
+    bitrate = body.get("bitrate", 192)
+
     song = await libraryService.get_song(song_hash)
     if not song:
-        raise HTTPException(status_code=404, detail="Song hash not found in library")
+        raise HTTPException(status_code=404, detail="Song not found")
 
     file_path = song.file_path
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Song file not found")
+        raise HTTPException(status_code=404, detail="Original file not found")
 
-    # MIME-Type automatisch bestimmen
+    if transcode:
+        try:
+            transcoder = Transcoding(
+                song_hash=song_hash,
+                src_file=file_path,
+                target_format=format_override,
+                target_bitrate=bitrate,
+                cache_dir="./transcode_cache"
+            )
+            output_file = transcoder.run()
+            mime_type = f"audio/{format_override}"
+
+            # Clean up in 10 minutes
+            schedule_cleanup(output_file, delay_sec=600)
+
+            return FileResponse(
+                path=output_file,
+                media_type=mime_type,
+                filename=os.path.basename(output_file)
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Transcoding error: {str(e)}")
+
+    # Fallback to original file
     mime_type, _ = mimetypes.guess_type(file_path)
-    if mime_type is None:
-        mime_type = "application/octet-stream"  # Fallback, wenn nicht erkannt
-
+    mime_type = mime_type or "application/octet-stream"
     return FileResponse(
         path=file_path,
         media_type=mime_type,
-        filename= f"{song_hash}.{os.path.basename(file_path).split('.')[-1]}"
+        filename=os.path.basename(file_path)
     )
 
 
