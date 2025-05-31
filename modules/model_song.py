@@ -9,6 +9,7 @@ from modules.filesys_utils import find_cover_art, calculate_loudness
 
 class Song:
     def __init__(self, file_path: str = "", skip_analysis: bool = False):
+        print(f"Scanning file: {file_path}")
         self.file_path = file_path
         self.track_number = 0
         self.disc_number = 0
@@ -102,7 +103,8 @@ class Song:
             self.title = _get_tag_dict(tags, "title")
             self.album = _get_tag_dict(tags, "album")
             self.album_artist = _get_tag_dict(tags, "albumartist") or _get_tag_dict(tags, "artist")
-            self.other_artists = _get_tag_list(tags, "albumartist") + (_get_tag_list(tags, "artist") if len(_get_tag_list(tags, "artist")) > 1 else [])
+            self.other_artists = _get_tag_list(tags, "albumartist") + tags.get("artist", [])
+
             self.genres = _get_tag_list(tags, "genre")
             date = _get_tag_dict(tags, "date", "0")
             self.release_year = int(date[:4]) if date else 0
@@ -112,8 +114,12 @@ class Song:
             disc_str = _get_tag_dict(tags, "discnumber", "0")
             self.disc_number = int(disc_str.split("/")[0]) if disc_str else 0
 
+        old_artists = self.other_artists
         filtered = [artist for artist in self.other_artists if artist != "Various Artists"]
-        self.other_artists = list(dict.fromkeys(filtered))
+        self.other_artists = list(set(filtered))
+        if not self.other_artists:
+            print(tags)
+            print(old_artists)
 
         self.get_hash()
 
