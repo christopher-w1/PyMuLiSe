@@ -1,9 +1,16 @@
-import os, mimetypes
+import os, mimetypes, io
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
+from fastapi import Query
+from PIL import Image
 from modules.library_service import LibraryService
-
 from contextlib import asynccontextmanager
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 libraryService = LibraryService()
 
@@ -13,10 +20,20 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def check_access_token(token: str) -> bool:
     valid_token = os.getenv("ACCESS_TOKEN")
+    if not valid_token:
+        return True
     print(f"Valid token: {valid_token}")
     print(f"Provided token: {token}")
     return token == valid_token
@@ -107,7 +124,7 @@ async def get_song_details(request: Request):
 
 
 @app.post("/get_cover_art")
-async def get_cover_art(request: Request):
+async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, le=1000)):
     body = await request.json()
     access_token = body.get("access_token")
     if not access_token or not check_access_token(access_token):
@@ -120,7 +137,19 @@ async def get_cover_art(request: Request):
     file_path = libraryService.cover_map.get(song_hash)
     if not file_path:
         raise HTTPException(status_code=404, detail="Cover art not found")
-    return FileResponse(file_path, media_type="image/jpeg", filename=f"{song_hash}.jpg")
+    
+    if size is None:
+        return FileResponse(file_path, media_type="image/jpeg", filename=f"{song_hash}.jpg")
+
+    img = Image.open(file_path)
+    x, y = img.size
+    factor = size / max(x, y, size)
+    img.thumbnail((int(factor*x), int(factor*y)))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/jpeg", headers={"Content-Disposition": f"inline; filename={song_hash}.jpg"})
+
 
 
 @app.post("/get_song_file")
@@ -188,8 +217,8 @@ async def get_song_file_from_metadata(request: Request):
     )
         
         
-@app.get("/")
-async def root():
+@app.get("/api")
+async def api_info():
     return {"message": "Welcome to the PyMuLiSe API!",
             "status": "running",
             "available_endpoints": [
@@ -201,6 +230,14 @@ async def root():
                 "/get_song_file",
                 "/get_song_file_from_metadata"
             ]}
+    
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    if not os.path.exists(index_path):
+        return HTMLResponse(content="index.html nicht gefunden", status_code=404)
+    with open(index_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read(), status_code=200)
         
 def main():
     import uvicorn

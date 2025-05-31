@@ -86,7 +86,7 @@ class Song:
         self.title = tags.get("title", [""])[0]
         self.album = tags.get("album", [""])[0]
         self.album_artist = tags.get("albumartist", tags.get("artist", [""]))[0]
-        self.other_artists = tags.get("artist", [])[1:] if len(tags.get("artist", [])) > 1 else []
+        self.other_artists = tags.get("albumartist", []) + (tags.get("artist", []) if len(tags.get("artist", [])) > 1 else [])
         self.genres = tags.get("genre", [])
         self._fix_genres()
         self.release_year = int(tags.get("date", ["0"])[0][:4]) if tags.get("date") else 0

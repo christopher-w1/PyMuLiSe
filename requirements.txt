@@ -3,3 +3,4 @@ r128gain
 requests
 fastapi
 uvicorn
+pillow
