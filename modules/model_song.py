@@ -9,7 +9,6 @@ from modules.filesys_utils import find_cover_art, calculate_loudness
 
 class Song:
     def __init__(self, file_path: str = "", skip_analysis: bool = False):
-        print(f"Scanning file: {file_path}")
         self.file_path = file_path
         self.track_number = 0
         self.disc_number = 0
@@ -36,6 +35,7 @@ class Song:
 
         if not file_path:
             return
+        print(f"Scanning file: {self.file_path}")
 
         self.file_size = os.path.getsize(file_path)
         audio = File(file_path, easy=True)
@@ -69,7 +69,7 @@ class Song:
         if not audio:
             raise ValueError("Could not read audio file")
 
-        def _get_tag_dict(tags, key, default=""):
+        def _get_tag_entry(tags, key, default=""):
             try:
                 return tags.get(key, [default])[0]
             except Exception:
@@ -83,35 +83,35 @@ class Song:
 
         if ext == ".m4a" and type(metadata.tags) == MP4Tags:
             tags = metadata.tags or {}
-            self.title = _get_tag_dict(tags, "\xa9nam")
-            self.album = _get_tag_dict(tags, "\xa9alb")
-            self.album_artist = _get_tag_dict(tags, "aART") or _get_tag_dict(tags, "\xa9ART")
+            self.title = _get_tag_entry(tags, "\xa9nam")
+            self.album = _get_tag_entry(tags, "\xa9alb")
+            self.album_artist = _get_tag_entry(tags, "aART") or _get_tag_entry(tags, "\xa9ART")
 
             artists = _get_tag_list(tags, "\xa9ART")
             self.other_artists = artists if len(artists) > 1 else _get_tag_list(tags, "aART") + artists
 
             self.genres = _get_tag_list(tags, "\xa9gen")
-            date = _get_tag_dict(tags, "\xa9day", "0")
+            date = _get_tag_entry(tags, "\xa9day", "0")
             self.release_year = int(date[:4]) if date else 0
-            self.lyrics = _get_tag_dict(tags, "\xa9lyr")
+            self.lyrics = _get_tag_entry(tags, "\xa9lyr")
             track_info = _get_tag_list(tags, "trkn")
             self.track_number = track_info[0][0] if track_info else 0
             disc_info = _get_tag_list(tags, "disk")
             self.disc_number = disc_info[0][0] if disc_info else 0
         else:
             tags = audio.tags or {}
-            self.title = _get_tag_dict(tags, "title")
-            self.album = _get_tag_dict(tags, "album")
-            self.album_artist = _get_tag_dict(tags, "albumartist") or _get_tag_dict(tags, "artist")
+            self.title = _get_tag_entry(tags, "title")
+            self.album = _get_tag_entry(tags, "album")
+            self.album_artist = _get_tag_entry(tags, "albumartist") or _get_tag_entry(tags, "artist")
             self.other_artists = _get_tag_list(tags, "albumartist") + tags.get("artist", [])
 
             self.genres = _get_tag_list(tags, "genre")
-            date = _get_tag_dict(tags, "date", "0")
+            date = _get_tag_entry(tags, "date", "0")
             self.release_year = int(date[:4]) if date else 0
-            self.lyrics = _get_tag_dict(tags, "lyrics")
-            track_str = _get_tag_dict(tags, "tracknumber", "0")
+            self.lyrics = _get_tag_entry(tags, "lyrics")
+            track_str = _get_tag_entry(tags, "tracknumber", "0")
             self.track_number = int(track_str.split("/")[0]) if track_str else 0
-            disc_str = _get_tag_dict(tags, "discnumber", "0")
+            disc_str = _get_tag_entry(tags, "discnumber", "0")
             self.disc_number = int(disc_str.split("/")[0]) if disc_str else 0
 
         old_artists = self.other_artists
@@ -124,8 +124,8 @@ class Song:
         self.get_hash()
 
         if "explicit" in tags:
-            self.explicit = _get_tag_dict(tags, "explicit").lower() in ["1", "true", "yes"]
-        elif "lyrics" in tags and "explicit" in _get_tag_dict(tags, "lyrics", "").lower():
+            self.explicit = _get_tag_entry(tags, "explicit").lower() in ["1", "true", "yes"]
+        elif "lyrics" in tags and "explicit" in _get_tag_entry(tags, "lyrics", "").lower():
             self.explicit = True
 
         self.play_count = 0
