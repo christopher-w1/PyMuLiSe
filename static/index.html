@@ -19,11 +19,20 @@
     <!-- Buttons -->
     <div class="flex flex-wrap gap-4 mb-6">
       <button onclick="loadLibrary()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">📚 Bibliothek laden</button>
+      <div id="paginationControls" class="hidden flex items-center gap-2">
+        <button onclick="prevPage()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">⬅️ Zurück</button>
+        <span id="pageInfo" class="px-3">Seite 1 von 1</span>
+        <button onclick="nextPage()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">Weiter ➡️</button>
+        <select id="artistFilter" onchange="filterArtists()" class="bg-gray-800 text-white p-1 rounded">
+          <option value="">Alle Künstler</option>
+          <!-- Options werden dynamisch eingefügt -->
+        </select>
+      </div>
     </div>
 
     <!-- Anzeigecontainer -->
     <div id="output" class="space-y-4"></div>
-    <div id="loadingIndicator" class="text-center py-4 hidden">
+    <div id="loadingIndicator" class="text-center py-4">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
     </div>
   </div>
@@ -32,9 +41,10 @@
     const coverCache = new Map();
     const audioSrcCache = new Map();
     let libraryData = null;
-    let visibleArtists = 5; // Initial number of artists to show
-    const artistsPerLoad = 5; // Additional artists to load on scroll
-    let isLoading = false;
+    let currentPage = 1;
+    const artistsPerPage = 10;
+    let filteredArtists = [];
+    let currentFilter = "";
 
     async function postData(endpoint, body) {
       const token = document.getElementById("token").value;
@@ -69,7 +79,7 @@
       return url;
     }
 
-    function renderArtist(artist, index) {
+    function renderArtist(artist) {
       const token = document.getElementById("token").value;
       const { songs, albums } = libraryData;
       const songMap = new Map();
@@ -77,7 +87,6 @@
 
       const artistDiv = document.createElement("div");
       artistDiv.className = "mb-6";
-      artistDiv.dataset.artistIndex = index;
 
       const artistHeader = document.createElement("h2");
       artistHeader.className = "text-2xl font-bold mb-2 text-blue-300";
@@ -167,73 +176,108 @@
       return artistDiv;
     }
 
-    function loadMoreArtists() {
-      if (isLoading || !libraryData || visibleArtists >= libraryData.artists.length) {
-        document.getElementById('loadingIndicator').classList.add('hidden');
-        return;
-      }
-
-      isLoading = true;
-      document.getElementById('loadingIndicator').classList.remove('hidden');
-
-      // Use setTimeout to allow UI to update before heavy rendering
-      setTimeout(() => {
-        const container = document.getElementById("output");
-        const endIndex = Math.min(visibleArtists + artistsPerLoad, libraryData.artists.length);
-        
-        for (let i = visibleArtists; i < endIndex; i++) {
-          const artist = libraryData.artists[i];
-          container.appendChild(renderArtist(artist, i));
-        }
-        
-        visibleArtists = endIndex;
-        isLoading = false;
-        
-        if (visibleArtists >= libraryData.artists.length) {
-          document.getElementById('loadingIndicator').classList.add('hidden');
-        } else {
-          document.getElementById('loadingIndicator').classList.remove('hidden');
-        }
-      }, 100);
+    function updatePagination() {
+      const totalPages = Math.ceil(filteredArtists.length / artistsPerPage);
+      document.getElementById("pageInfo").textContent = `Seite ${currentPage} von ${totalPages}`;
+      
+      // Zurück-Button deaktivieren, wenn wir auf der ersten Seite sind
+      document.querySelector("#paginationControls button:first-child").disabled = currentPage === 1;
+      
+      // Weiter-Button deaktivieren, wenn wir auf der letzten Seite sind
+      document.querySelector("#paginationControls button:last-child").disabled = currentPage >= totalPages;
     }
 
-    // Intersection Observer for infinite scroll
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        loadMoreArtists();
+    function renderCurrentPage() {
+      const container = document.getElementById("output");
+      container.innerHTML = "";
+
+      const startIdx = (currentPage - 1) * artistsPerPage;
+      const endIdx = startIdx + artistsPerPage;
+      const artistsToShow = filteredArtists.slice(startIdx, endIdx);
+
+      artistsToShow.forEach(artist => {
+        container.appendChild(renderArtist(artist));
+      });
+
+      updatePagination();
+    }
+
+    function nextPage() {
+      const totalPages = Math.ceil(filteredArtists.length / artistsPerPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderCurrentPage();
       }
-    }, { threshold: 0.1 });
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderCurrentPage();
+      }
+    }
+
+    function filterArtists() {
+      currentFilter = document.getElementById("artistFilter").value;
+      currentPage = 1;
+      
+      if (!currentFilter) {
+        filteredArtists = [...libraryData.artists];
+      } else {
+        filteredArtists = libraryData.artists.filter(artist => 
+          artist.name.startsWith(currentFilter)
+        );
+      }
+      
+      renderCurrentPage();
+    }
+
+    function setupArtistFilter() {
+      const filterSelect = document.getElementById("artistFilter");
+      
+      // Alphabetische Gruppierung erstellen
+      const alphabetGroups = {};
+      libraryData.artists.forEach(artist => {
+        const firstLetter = artist.name.charAt(0).toUpperCase();
+        if (!alphabetGroups[firstLetter]) {
+          alphabetGroups[firstLetter] = true;
+        }
+      });
+      
+      // Alphabetische Optionen hinzufügen
+      Object.keys(alphabetGroups).sort().forEach(letter => {
+        const option = document.createElement("option");
+        option.value = letter;
+        option.textContent = letter;
+        filterSelect.appendChild(option);
+      });
+    }
 
     async function loadLibrary() {
       const container = document.getElementById("output");
       container.innerHTML = "";
-      visibleArtists = 5;
-      
-      document.getElementById('loadingIndicator').classList.remove('hidden');
+      document.getElementById("loadingIndicator").classList.remove("hidden");
+      document.getElementById("paginationControls").classList.add("hidden");
       
       try {
         libraryData = await postData("/get_full_library", {});
         
-        container.innerHTML = "";
-        const initialArtists = libraryData.artists.slice(0, visibleArtists);
+        // Alphabetisch sortieren
+        libraryData.artists.sort((a, b) => a.name.localeCompare(b.name));
         
-        initialArtists.forEach((artist, index) => {
-          container.appendChild(renderArtist(artist, index));
-        });
+        filteredArtists = [...libraryData.artists];
+        currentPage = 1;
         
-        // Setup observer after initial load
-        observer.observe(document.getElementById('loadingIndicator'));
+        setupArtistFilter();
+        renderCurrentPage();
+        
+        document.getElementById("paginationControls").classList.remove("hidden");
       } catch (error) {
         console.error("Error loading library:", error);
       } finally {
-        document.getElementById('loadingIndicator').classList.add('hidden');
+        document.getElementById("loadingIndicator").classList.add("hidden");
       }
     }
-
-    // Initialize observer when page loads
-    window.addEventListener('DOMContentLoaded', () => {
-      observer.observe(document.getElementById('loadingIndicator'));
-    });
   </script>
 </body>
 </html>
