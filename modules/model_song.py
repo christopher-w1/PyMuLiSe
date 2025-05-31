@@ -114,12 +114,13 @@ class Song:
             disc_str = _get_tag_entry(tags, "discnumber", "0")
             self.disc_number = int(disc_str.split("/")[0]) if disc_str else 0
 
-        old_artists = self.other_artists
-        filtered = [artist for artist in self.other_artists if artist != "Various Artists"]
-        self.other_artists = list(set(filtered))
-        if not self.other_artists:
-            print(tags)
-            print(old_artists)
+        split_pattern = r',|;|/| feat\.? '
+        self.other_artists = list({
+            artist.strip()
+            for entry in self.other_artists
+            for artist in re.split(split_pattern, entry)
+            if artist.strip() and artist.strip() != "Various Artists"
+        })
 
         self.get_hash()
 
