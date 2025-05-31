@@ -3,6 +3,17 @@ import os
 import mutagen
 import shutil
 
+EXTENSION_ENCODER_MAP = {
+    "mp3": "libmp3lame",
+    "ogg": "libvorbis",
+    "opus": "libopus",
+    "aac": "aac",  
+    "m4a": "aac",  
+    "flac": "flac",
+    "wav": "pcm_s16le",
+    "alac": "alac"
+}
+
 class Transcoding:
     def __init__(self, song_hash: str, src_file: str, target_format: str, target_bitrate: int | None, cache_dir: str):
         self.song_hash = song_hash
@@ -54,13 +65,18 @@ class Transcoding:
             # Originalformat & Bitrate sind akzeptabel → nur kopieren
             shutil.copy2(self.src_file, self.output_file)
             return self.output_file
+        
+        format_encoder = EXTENSION_ENCODER_MAP.get(self.target_format)
+        if not format_encoder:
+            raise ValueError(f"Unsupported or unsafe target format: {self.target_format}")
 
-        # Transkodierung nötig
         command = [
             "ffmpeg",
             "-i", self.src_file,
-            "-y"
+            "-y",
+            "-c:a", format_encoder
         ]
+        
         if self.target_bitrate:
             command += ["-b:a", f"{self.target_bitrate}k"]
 
