@@ -18,13 +18,13 @@
 
     <!-- Buttons -->
     <div class="flex flex-wrap gap-4 mb-6">
-      <button onclick="loadLibrary()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">📚 Bibliothek laden</button>
+      <button onclick="loadLibrary()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">📚 Load Library</button>
       <div id="paginationControls" class="hidden flex items-center gap-2">
-        <button onclick="prevPage()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">⬅️ Zurück</button>
+        <button id="prevButton" onclick="prevPage()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded disabled:opacity-50">⬅️ Previous</button>
         <span id="pageInfo" class="px-3">Seite 1 von 1</span>
-        <button onclick="nextPage()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">Weiter ➡️</button>
+        <button id="nextButton" onclick="nextPage()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded disabled:opacity-50">Next ➡️</button>
         <select id="artistFilter" onchange="filterArtists()" class="bg-gray-800 text-white p-1 rounded">
-          <option value="">Alle Künstler</option>
+          <option value="">All Artists</option>
           <!-- Options werden dynamisch eingefügt -->
         </select>
       </div>
@@ -46,8 +46,13 @@
     let filteredArtists = [];
     let currentFilter = "";
 
+    // Hilfsfunktion für einfacheren DOM-Zugriff
+    function $(selector) {
+      return document.querySelector(selector);
+    }
+
     async function postData(endpoint, body) {
-      const token = document.getElementById("token").value;
+      const token = $("#token").value;
       body.access_token = token;
       const response = await fetch(endpoint, {
         method: "POST",
@@ -80,7 +85,7 @@
     }
 
     function renderArtist(artist) {
-      const token = document.getElementById("token").value;
+      const token = $("#token").value;
       const { songs, albums } = libraryData;
       const songMap = new Map();
       songs.forEach(song => songMap.set(song.hash, song));
@@ -178,17 +183,15 @@
 
     function updatePagination() {
       const totalPages = Math.ceil(filteredArtists.length / artistsPerPage);
-      document.getElementById("pageInfo").textContent = `Seite ${currentPage} von ${totalPages}`;
+      $("#pageInfo").textContent = `Seite ${currentPage} von ${totalPages}`;
       
-      // Zurück-Button deaktivieren, wenn wir auf der ersten Seite sind
-      document.querySelector("#paginationControls button:first-child").disabled = currentPage === 1;
-      
-      // Weiter-Button deaktivieren, wenn wir auf der letzten Seite sind
-      document.querySelector("#paginationControls button:last-child").disabled = currentPage >= totalPages;
+      // Buttons aktivieren/deaktivieren
+      $("#prevButton").disabled = currentPage === 1;
+      $("#nextButton").disabled = currentPage >= totalPages;
     }
 
     function renderCurrentPage() {
-      const container = document.getElementById("output");
+      const container = $("#output");
       container.innerHTML = "";
 
       const startIdx = (currentPage - 1) * artistsPerPage;
@@ -218,14 +221,14 @@
     }
 
     function filterArtists() {
-      currentFilter = document.getElementById("artistFilter").value;
+      currentFilter = $("#artistFilter").value;
       currentPage = 1;
       
       if (!currentFilter) {
         filteredArtists = [...libraryData.artists];
       } else {
         filteredArtists = libraryData.artists.filter(artist => 
-          artist.name.startsWith(currentFilter)
+          artist.name.charAt(0).toUpperCase() === currentFilter
         );
       }
       
@@ -233,19 +236,17 @@
     }
 
     function setupArtistFilter() {
-      const filterSelect = document.getElementById("artistFilter");
+      const filterSelect = $("#artistFilter");
       
       // Alphabetische Gruppierung erstellen
-      const alphabetGroups = {};
+      const alphabetGroups = new Set();
       libraryData.artists.forEach(artist => {
         const firstLetter = artist.name.charAt(0).toUpperCase();
-        if (!alphabetGroups[firstLetter]) {
-          alphabetGroups[firstLetter] = true;
-        }
+        alphabetGroups.add(firstLetter);
       });
       
       // Alphabetische Optionen hinzufügen
-      Object.keys(alphabetGroups).sort().forEach(letter => {
+      Array.from(alphabetGroups).sort().forEach(letter => {
         const option = document.createElement("option");
         option.value = letter;
         option.textContent = letter;
@@ -254,10 +255,10 @@
     }
 
     async function loadLibrary() {
-      const container = document.getElementById("output");
+      const container = $("#output");
       container.innerHTML = "";
-      document.getElementById("loadingIndicator").classList.remove("hidden");
-      document.getElementById("paginationControls").classList.add("hidden");
+      $("#loadingIndicator").classList.remove("hidden");
+      $("#paginationControls").classList.add("hidden");
       
       try {
         libraryData = await postData("/get_full_library", {});
@@ -271,11 +272,11 @@
         setupArtistFilter();
         renderCurrentPage();
         
-        document.getElementById("paginationControls").classList.remove("hidden");
+        $("#paginationControls").classList.remove("hidden");
       } catch (error) {
         console.error("Error loading library:", error);
       } finally {
-        document.getElementById("loadingIndicator").classList.add("hidden");
+        $("#loadingIndicator").classList.add("hidden");
       }
     }
   </script>
