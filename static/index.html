@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PyMuLiSe Web</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans p-4">
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-3xl font-bold mb-6">🎵 PyMuLiSe Webinterface</h1>
+
+    <!-- Access Token -->
+    <div class="mb-4">
+      <label for="token" class="block mb-1">Access Token:</label>
+      <input id="token" type="password" class="w-full p-2 rounded bg-gray-800 border border-gray-700" />
+    </div>
+
+    <!-- Buttons -->
+    <div class="flex flex-wrap gap-4 mb-6">
+      <button onclick="loadLibrary()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">📚 Bibliothek laden</button>
+    </div>
+
+    <!-- Anzeigecontainer -->
+    <div id="output" class="space-y-4"></div>
+  </div>
+
+  <script>
+    const coverCache = new Map();
+
+    async function postData(endpoint, body) {
+      const token = document.getElementById("token").value;
+      body.access_token = token;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      return await response.json();
+    }
+
+    function formatDuration(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60).toString().padStart(2, "0");
+      return `${minutes}:${secs}`;
+    }
+
+    async function fetchCoverArt(songHash, accessToken) {
+      if (coverCache.has(songHash)) return coverCache.get(songHash);
+
+      const response = await fetch("/get_cover_art", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ song_hash: songHash, access_token: accessToken })
+      });
+
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      coverCache.set(songHash, url);
+      return url;
+    }
+
+    function getSongFileUrl(songHash, accessToken) {
+      const blob = new Blob([JSON.stringify({ song_hash: songHash, access_token: accessToken })], { type: 'application/json' });
+      const request = new Request('/get_song_file', {
+        method: 'POST',
+        body: blob,
+        headers: { 'Content-Type': 'application/json' }
+      });
+      return fetch(request)
+        .then(res => res.ok ? res.blob() : null)
+        .then(blob => blob ? URL.createObjectURL(blob) : null);
+    }
+
+    async function loadLibrary() {
+      const token = document.getElementById("token").value;
+      const { songs, albums, artists } = await postData("/get_full_library", {});
+      const container = document.getElementById("output");
+      container.innerHTML = "";
+
+      const songMap = new Map();
+      songs.forEach(song => songMap.set(song.hash, song));
+
+      for (const artist of artists) {
+        const artistDiv = document.createElement("div");
+        artistDiv.className = "mb-6";
+
+        const artistHeader = document.createElement("h2");
+        artistHeader.className = "text-2xl font-bold mb-2 text-blue-300";
+        artistHeader.textContent = artist.name;
+        artistDiv.appendChild(artistHeader);
+
+        for (const albumHash of artist.albums) {
+          const album = albums.find(a => a.hash === albumHash);
+          if (!album) continue;
+
+          const albumDiv = document.createElement("div");
+          albumDiv.className = "bg-gray-800 p-4 rounded shadow mb-2";
+
+          const albumHeader = document.createElement("button");
+          albumHeader.className = "w-full text-left text-xl font-semibold text-white hover:text-blue-400 mb-2";
+          albumHeader.textContent = album.name;
+
+          const songContainer = document.createElement("div");
+          songContainer.className = "flex flex-wrap gap-4 hidden";
+
+          albumHeader.onclick = () => songContainer.classList.toggle("hidden");
+
+          for (const songHash of album.songs) {
+            const song = songMap.get(songHash);
+            if (!song) continue;
+
+            const songCard = document.createElement("div");
+            songCard.className = "bg-gray-700 p-3 rounded w-48 flex-shrink-0";
+            songCard.innerHTML = `
+              <p class="font-medium truncate">${song.track_number}. ${song.title}</p>
+              <p class="text-sm text-gray-400">${formatDuration(song.duration)}</p>
+              <p class="text-xs text-gray-500">${song.genres.join(", ")}</p>
+              <p class="text-xs">Plays: ${song.play_count}</p>
+              <audio controls class="w-full mt-1" id="player-${song.hash}"></audio>
+            `;
+            songContainer.appendChild(songCard);
+
+            getSongFileUrl(song.hash, token).then(url => {
+              if (url) {
+                const player = document.getElementById(`player-${song.hash}`);
+                player.src = url;
+              }
+            });
+          }
+
+          albumDiv.appendChild(albumHeader);
+          albumDiv.appendChild(songContainer);
+
+          if (album.songs.length > 0) {
+            fetchCoverArt(album.songs[0], token).then(url => {
+              if (url) {
+                const img = document.createElement("img");
+                img.src = url;
+                img.alt = "Cover";
+                img.className = "w-24 h-24 rounded mb-2";
+                albumHeader.prepend(img);
+              }
+            });
+          }
+
+          artistDiv.appendChild(albumDiv);
+        }
+
+        container.appendChild(artistDiv);
+      }
+    }
+  </script>
+</body>
+</html>
