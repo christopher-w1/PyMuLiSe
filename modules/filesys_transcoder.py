@@ -73,6 +73,7 @@ class Transcoding:
         command = [
             "ffmpeg",
             "-i", self.src_file,
+            "-vn",             
             "-y",
             "-c:a", format_encoder
         ]
@@ -81,6 +82,7 @@ class Transcoding:
             command += ["-b:a", f"{self.target_bitrate}k"]
 
         command.append(self.output_file)
+        print(command)
 
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode != 0:
