@@ -256,7 +256,7 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
             if artist_name:
                 simple_name = Artist.get_simple_name(artist_name)
                 if simple_name not in artist_dict.keys():
-                    print("Adding artist", artist_name, f"because {simple_name} not in dict")
+                    #print("Adding artist", artist_name, f"because {simple_name} not in dict")
                     artist_dict[simple_name] = Artist(artist_name)
                 artist_dict[simple_name].add_song(song)
     artist_objects = list(artist_dict.values())

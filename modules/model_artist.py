@@ -2,6 +2,7 @@ from typing import Optional
 from modules.model_song import Song
 from modules.model_album import Album
 from hashlib import sha256
+import difflib
 
 CHAR_REPLACEMENTS = {
     " ": "_",
@@ -108,11 +109,12 @@ class Artist:
                 names[song.album_artist] = names.get(song.album_artist, 0) + 1
         max_count = 0
         for name, count in names.items():
-            if count == len(self.songs):
-                self.name = name
-            elif count > max_count:
-                self.name = name
-                max_count = count
+            if difflib.SequenceMatcher(None, name, self.name).ratio() > 0.8:
+                if count == len(self.songs):
+                    self.name = name
+                elif count > max_count:
+                    self.name = name
+                    max_count = count
                 
     def update_self(self) -> None:
         """
