@@ -252,18 +252,15 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
     print("Mapping songs to artists...")
     artist_dict: dict[str, Artist] = {}
     for song in tqdm(updated_songs, desc="Processed songs"):
-        artist_names_raw = []
         for artist_name in [song.album_artist] + song.other_artists:
-            if artist_name and artist_name not in artist_names_raw:
-                artist_names_raw.append(artist_name)  # <--- vermutlich ein Fehler, siehe Hinweis unten
-
-        for raw_name in artist_names_raw:
-            simple_name = Artist.get_simple_name(raw_name)
-            if simple_name not in artist_dict:
-                artist_dict[simple_name] = Artist(raw_name)
-            artist_dict[simple_name].add_song(song)
-
+            if artist_name:
+                simple_name = Artist.get_simple_name(artist_name)
+                if simple_name not in artist_dict.keys():
+                    print("Adding artist", artist_name, f"because {simple_name} not in dict")
+                    artist_dict[simple_name] = Artist(artist_name)
+                artist_dict[simple_name].add_song(song)
     artist_objects = list(artist_dict.values())
+    print(f"{len(artist_objects)} artists found | Dictionary size: {len(artist_dict)}")
 
     # Map albums to artists
     print("Mapping albums to artists...")

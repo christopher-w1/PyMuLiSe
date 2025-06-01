@@ -17,6 +17,8 @@ CHAR_REPLACEMENTS = {
     "and": "&",
 }
 
+INVALID_NAME_UPDATES = ["various artists", "unkown artist", "unknown", "verschiedene interpreten"]
+
 class Artist:
     def __init__(self, name: str, genres: Optional[list[str]] = None):
         self.hash = sha256(name.encode()).hexdigest()
@@ -92,6 +94,8 @@ class Artist:
             self.hash = sha256(self.name.encode()).hexdigest()
         return self.hash
     
+    
+    
     def _update_most_common_name(self):
         """
         Update the artist name based on the most common name in the songs.
@@ -100,7 +104,7 @@ class Artist:
             return
         names = {}
         for song in self.songs:
-            if song.album_artist and str(song.album_artist).lower() != "unknown":
+            if song.album_artist and str(song.album_artist).lower() not in INVALID_NAME_UPDATES:
                 names[song.album_artist] = names.get(song.album_artist, 0) + 1
         max_count = 0
         for name, count in names.items():
