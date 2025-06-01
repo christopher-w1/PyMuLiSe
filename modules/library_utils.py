@@ -45,27 +45,33 @@ def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: f
 
     for song in songs:
         song_id = str(song.file_path)
-        artist = (song.album_artist if song.album_artist != "Various Artists"
-                  else None) or (song.other_artists[0] if song.other_artists else None) or "Various Artists"
+        artists = [a for a in song.other_artists + [song.album_artist] if a != "Various Artists"] or ["Various Artists"]
         title = song.title
 
-        if artist and title:
+        if artists and title:
             id_map[song_id] = song
-            tasks.append((song_id, artist, title, api_key))
+            tasks.append((song_id, artists, title, api_key))
 
     for args in tqdm(tasks, desc="Fetching LastFM data", unit="song"):
-        start_time = time.time()
-        _, artist, title, _ = args
-        song_id, playcount, tags = fetch_lastfm_data_minimal(args)
-        song = id_map.get(song_id)
-        if not playcount or not tags:
-            print(f"Last.fm data incomplete for {artist} - {title}: playcount={playcount}, tags={tags}")
-        if song:
-            song.lastfm_playcount = playcount
-            song.lastfm_tags = tags
-        time_taken = time.time() - start_time
-        if time_taken < delay_per_request:
-            time.sleep(delay_per_request - time_taken)
+        song_id, artists, title, api_key = args
+        playcount, tags = None, None
+        for artist in artists:
+            start_time = time.time()
+            _, playcount, tags = fetch_lastfm_data_minimal((song_id, artist, title, api_key))
+            if not playcount or not tags:
+                print(f"Last.fm data incomplete for {artist} - {title}: playcount={playcount}, tags={tags}")
+            else:
+                song = id_map.get(song_id)
+                if song:
+                    song.lastfm_playcount = playcount
+                    song.lastfm_tags = tags
+                    break
+                else:
+                    print(f"Error: Song with id {song_id} not found!")
+            time_taken = time.time() - start_time
+            if time_taken < delay_per_request:
+                time.sleep(delay_per_request - time_taken)
+          
     
 def init_library():
     is_new = False
