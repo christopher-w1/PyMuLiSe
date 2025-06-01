@@ -1,6 +1,8 @@
 import os, subprocess, re
 from typing import Optional
-
+from mutagen import File # type: ignore
+from PIL import Image
+from io import BytesIO
 
 def find_song_paths(music_dir: str) -> list:
     """
@@ -26,7 +28,7 @@ def find_song_paths(music_dir: str) -> list:
             return
         return
     find_rec(music_dir)
-    return song_paths
+    return [path for path in song_paths if not os.path.isdir(path)]
 
 
 def calculate_loudness(file_path: str) -> tuple[Optional[float], Optional[float]]:
@@ -47,6 +49,33 @@ def calculate_loudness(file_path: str) -> tuple[Optional[float], Optional[float]
         #print(f"[ERROR] Loudness analysis failed for {file_path}: {e}")
     return loudness, peak
 
+def extract_cover(file_path: str) -> str:
+    print(f"Try to extract cover from {file_path} ...")
+    audio = File(file_path)
+    directory = os.path.dirname(file_path)
+    image_data = None
+    
+    if audio:
+        if hasattr(audio, "pictures") and audio.pictures:
+            image_data = audio.pictures[0].data
+        elif "covr" in audio:
+            covr = audio["covr"][0]
+            image_data = bytes(covr)
+        elif audio.tags:
+            for tag in audio.tags.values():
+                if tag.FrameID == "APIC":
+                    image_data = tag.data
+                    break
+                
+    if image_data:
+        cover_path = os.path.join(directory, "cover.jpg")
+        try:
+            image = Image.open(BytesIO(image_data))
+            image.save(cover_path, format="JPEG")
+            return cover_path
+        except Exception as e:
+            return ""
+    return ""
 
 def find_cover_art(file_path: str) -> str:
     if not os.path.exists(file_path):
@@ -54,16 +83,13 @@ def find_cover_art(file_path: str) -> str:
     directory = os.path.dirname(file_path)
     image_extensions = [".jpg", ".jpeg", ".png", ".webp"]
     preferred_names = ["cover", "folder", "front", "album"]
-
+    any_image = ""
     for fname in os.listdir(directory):
         name, ext = os.path.splitext(fname)
         if ext.lower() in image_extensions:
             if name.lower() in preferred_names:
                 return os.path.join(directory, fname)
-
-    # Fallback: Erstes beliebiges Bild nehmen
-    for fname in os.listdir(directory):
-        _, ext = os.path.splitext(fname)
-        if ext.lower() in image_extensions:
-            return os.path.join(directory, fname)
-    return ""
+            any_image = os.path.join(directory, fname)
+    if not any_image and not os.path.isdir(file_path):
+        return extract_cover(file_path)
+    return any_image
