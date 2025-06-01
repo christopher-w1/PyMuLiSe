@@ -1,6 +1,10 @@
 import os, subprocess, re
 from typing import Optional
 from mutagen import File # type: ignore
+from mutagen.flac import FLAC, Picture
+from mutagen.mp3 import MP3
+from mutagen.mp4 import MP4
+from mutagen.oggvorbis import OggVorbis
 from PIL import Image
 from io import BytesIO
 
@@ -54,18 +58,40 @@ def extract_cover(file_path: str) -> str:
     audio = File(file_path)
     directory = os.path.dirname(file_path)
     image_data = None
+    ext = os.path.splitext(file_path)[1].lower()
     
-    if audio:
-        if hasattr(audio, "pictures") and audio.pictures:
-            image_data = audio.pictures[0].data
-        elif "covr" in audio:
-            covr = audio["covr"][0]
-            image_data = bytes(covr)
-        elif audio.tags:
-            for tag in audio.tags.values():
-                if tag.FrameID == "APIC":
-                    image_data = tag.data
-                    break
+    try:
+        if ext == ".flac":
+            audio = FLAC(file_path)
+            if audio.pictures:
+                image_data = audio.pictures[0].data
+
+        elif ext == ".mp3":
+            audio = MP3(file_path)
+            if audio.tags:
+                for tag in audio.tags.values():
+                    if hasattr(tag, "FrameID") and tag.FrameID == "APIC":
+                        image_data = tag.data
+                        break
+
+        elif ext in [".m4a", ".mp4", ".aac"]:
+            audio = MP4(file_path)
+            if "covr" in audio:
+                covr_data = audio["covr"]
+                if isinstance(covr_data, list) and len(covr_data) > 0:
+                    image_data = bytes(covr_data[0])
+
+        elif ext == ".ogg":
+            audio = OggVorbis(file_path)
+            if "METADATA_BLOCK_PICTURE" in audio:
+                import base64
+                b64_data = audio["METADATA_BLOCK_PICTURE"][0]
+                raw_data = base64.b64decode(b64_data)
+                picture = Picture()
+                picture.load(raw_data)
+                image_data = picture.data
+    except:
+        return ""
                 
     if image_data:
         cover_path = os.path.join(directory, "cover.jpg")
