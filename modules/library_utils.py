@@ -3,7 +3,7 @@ import json
 import time
 from tqdm import tqdm
 from typing import List, Tuple
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from modules.lastfm_client import LastFMClient
 from modules.filesys_utils import calculate_loudness
 from modules.model_song import Song
@@ -58,9 +58,7 @@ def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: f
         for artist in artists:
             start_time = time.time()
             _, playcount, tags = fetch_lastfm_data_minimal((song_id, artist, title, api_key))
-            if not playcount or not tags:
-                print(f"Last.fm data incomplete for {artist} - {title}: playcount={playcount}, tags={tags}")
-            else:
+            if playcount or tags:
                 song = id_map.get(song_id)
                 if song:
                     song.lastfm_playcount = playcount
@@ -189,19 +187,32 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
     songs_to_analyze = [s for s in updated_songs if not s.loudness]
     if songs_to_analyze:
         print(f"Calculating loudness for {len(songs_to_analyze)} songs...")
-        paths_to_analyze = [str(song.file_path) for song in songs_to_analyze]
+        was_updated = False
+        futures = {}
+        
         with ProcessPoolExecutor() as executor:
-            results = list(executor.map(calculate_loudness, paths_to_analyze))
-        for song, (loudness, peak) in zip(songs_to_analyze, results):
-            if loudness is not None:
-                song.loudness = loudness
-                song.peak = peak
-                print(f"✓ {song.title}: {loudness:.2f} LUFS, Peak: {peak:.2f} dBFS")
-            else:
-                print(f"✗ {song.title}: Loudness analysis failed")
-        was_updated = True
-        with open("data/songs.json", "w", encoding="utf-8") as f:
-            json.dump([s.to_dict() for s in updated_songs], f, ensure_ascii=False, indent=2)
+            for song in songs_to_analyze:
+                future = executor.submit(calculate_loudness, str(song.file_path))
+                futures[future] = song
+
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Analyzing loudness"):
+                song = futures[future]
+                try:
+                    loudness, peak = future.result()
+                    if loudness is not None:
+                        song.loudness = loudness
+                        song.peak = peak
+                    #    print(f"✓ {song.title}: {loudness:.2f} LUFS, Peak: {peak:.2f} dBFS")
+                    #else:
+                    #    print(f"✗ {song.title}: Loudness analysis failed")
+                    was_updated = True
+                except Exception as e:
+                    pass
+                    #print(f"✗ {song.title}: Exception during analysis: {e}")
+
+        if was_updated:
+            with open("data/songs.json", "w", encoding="utf-8") as f:
+                json.dump([s.to_dict() for s in updated_songs], f, ensure_ascii=False, indent=2)
     
     
     song_without_lastfm = [s for s in updated_songs if not s.lastfm_playcount]
@@ -238,23 +249,25 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
                     song.peak = album.peak
 
     # Map songs to artists
+    print("Mapping songs to artists...")
     artist_dict: dict[str, Artist] = {}
-    for song in updated_songs:
+    for song in tqdm(updated_songs, desc="Processed songs"):
         artist_names_raw = []
         for artist_name in [song.album_artist] + song.other_artists:
-            if artist_name and not artist_name in artist_names_raw:
-                artist_names_raw.append(song.album_artist)
+            if artist_name and artist_name not in artist_names_raw:
+                artist_names_raw.append(artist_name)  # <--- vermutlich ein Fehler, siehe Hinweis unten
 
         for raw_name in artist_names_raw:
             simple_name = Artist.get_simple_name(raw_name)
-            if simple_name not in artist_dict.keys():
-                print(f"{simple_name} not in Artist keys, adding...")
+            if simple_name not in artist_dict:
                 artist_dict[simple_name] = Artist(raw_name)
             artist_dict[simple_name].add_song(song)
+
     artist_objects = list(artist_dict.values())
 
     # Map albums to artists
-    for artist in artist_objects:
+    print("Mapping albums to artists...")
+    for artist in tqdm(artist_objects, desc="Processed artists"):
         for album in album_objects:
             for song in album.songs:
                 if song in artist.songs and album not in artist.albums:

@@ -29,12 +29,12 @@ class LastFMClient:
         response = requests.get(self.API_URL, params=params)
 
         if response.status_code != 200:
-            print(f"[ERROR] Last.fm request failed: {response.status_code}")
+            #print(f"[ERROR] Last.fm request failed: {response.status_code}")
             return None
 
         data = response.json()
         if "error" in data:
-            print(f"[ERROR] Last.fm: {data['message']}")
+            #print(f"[ERROR] Last.fm: {data['message']}")
             return None
 
         return data.get("track")

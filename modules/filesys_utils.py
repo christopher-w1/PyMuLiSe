@@ -41,9 +41,10 @@ def calculate_loudness(file_path: str) -> tuple[Optional[float], Optional[float]
             loudness = float(loudness_match.group(1))
         if peak_match:
             peak = float(peak_match.group(1))
-        print(f"[INFO] Loudness for '{file_path}':\n{loudness} LUFS, Peak: {peak} dBFS")
+        #print(f"[INFO] Loudness for '{file_path}':\n{loudness} LUFS, Peak: {peak} dBFS")
     except Exception as e:
-        print(f"[ERROR] Loudness analysis failed for {file_path}: {e}")
+        pass
+        #print(f"[ERROR] Loudness analysis failed for {file_path}: {e}")
     return loudness, peak
 
 
