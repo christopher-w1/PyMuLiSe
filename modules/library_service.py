@@ -30,7 +30,7 @@ class LibraryService:
         self.album_map: dict[str, Album] = {}
         self.artist_map: dict[str, Artist] = {}
         self._lock = asyncio.Lock()
-        self._task = None  # Erst später starten
+        self._task = None
 
     async def start_background_task(self):
         if self._task is None:
@@ -38,15 +38,16 @@ class LibraryService:
 
     async def _periodic_scan(self):
         while True:
-            print("Scanning library...")
-            snapshot = scan_library()
+            print("Starting library scan in background thread...")
+            snapshot = await asyncio.to_thread(scan_library)  # 🧠 NICHT BLOCKIEREND!
+            print("Scan finished.")
             async with self._lock:
                 self.library_snapshot = snapshot
                 self.song_map = {song.get_hash(): song for song in snapshot[0]}
                 self.cover_map = {song.get_hash(): song.cover_art for song in snapshot[0]}
                 self.album_map = {album.hash: album for album in snapshot[1]}
                 self.artist_map = {artist.name: artist for artist in snapshot[2]}
-            await asyncio.sleep(600)
+            await asyncio.sleep(600)  # alle 10 Minuten erneut scannen
 
     async def get_snapshot(self):
         async with self._lock:
