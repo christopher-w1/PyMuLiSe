@@ -279,7 +279,7 @@ async def serve_frontend():
 def main():
     import uvicorn
     rest_api_port = int(os.getenv("REST_API_PORT", 8000))
-    uvicorn.run(app, host="127.0.0.1", port=rest_api_port)
+    uvicorn.run(app, host="0.0.0.0", port=rest_api_port)
 
 if __name__ == "__main__":
     main()
