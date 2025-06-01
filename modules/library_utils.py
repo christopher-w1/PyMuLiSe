@@ -103,21 +103,21 @@ def load_library() -> tuple[list[Song], list[Album], list[Artist]]:
     # SONGS
     with open("data/songs.json", "r", encoding="utf-8") as f:
         song_dicts = json.load(f)
-    song_objects = [Song.from_dict(d) for d in song_dicts]
+    song_objects = [Song.from_dict(d) for d in tqdm(song_dicts, desc="Loading Songs")]
     song_map = {s.get_hash(): s for s in song_objects}
     print(f"✓ Loaded {len(song_objects)} songs")
 
     # ALBUMS
     with open("data/albums.json", "r", encoding="utf-8") as f:
         album_dicts = json.load(f)
-    album_objects = [Album.from_dict(d, song_map) for d in album_dicts]
+    album_objects = [Album.from_dict(d, song_map) for d in tqdm(album_dicts, desc="Loading Albums")]
     album_map = {a.hash: a for a in album_objects}
     print(f"✓ Loaded {len(album_objects)} albums")
 
     # ARTISTS
     with open("data/artists.json", "r", encoding="utf-8") as f:
         artist_dicts = json.load(f)
-    artist_objects = [Artist.from_dict(d, song_map, album_map) for d in artist_dicts]
+    artist_objects = [Artist.from_dict(d, song_map, album_map) for d in tqdm(artist_dicts, desc="Loading Artists")]
     print(f"✓ Loaded {len(artist_objects)} artists")
 
     print("✓ Library successfully loaded.")
