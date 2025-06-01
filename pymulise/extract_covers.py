@@ -12,5 +12,6 @@ if __name__ == "__main__":
             cover_path = find_cover_art(file_path)
             if cover_path:
                 album_paths.remove(os.path.dirname(cover_path))
+    album_paths = list(set(album_paths))
     print(f"Cover missing from {len(album_paths)} albums:")
     print('\n'.join(album_paths))
