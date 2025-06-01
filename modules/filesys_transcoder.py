@@ -25,7 +25,10 @@ def get_encoder_for_format(fmt: str) -> str | None:
     fmt = fmt.lower()
     if fmt in ("aac", "m4a") and has_encoder("libfdk_aac"):
         return "libfdk_aac"
-    return DEFAULT_ENCODERS.get(fmt)
+    default_encoder = DEFAULT_ENCODERS.get(fmt)
+    if default_encoder and has_encoder(default_encoder):
+        return default_encoder
+    return None
 
 class Transcoding:
     def __init__(self, song_hash: str, src_file: str, target_format: str, target_bitrate: int | None, cache_dir: str):
@@ -80,8 +83,8 @@ class Transcoding:
             return self.output_file
         
         encoder = get_encoder_for_format(self.target_format)
-        if not encoder:
-            raise ValueError(f"Unsupported target format or encoder: {self.target_format}")
+        #if not encoder:
+        #    raise ValueError(f"Unsupported target format or encoder: {self.target_format}")
 
 
         command = [
@@ -89,8 +92,10 @@ class Transcoding:
             "-i", self.src_file,
             "-vn",             
             "-y",
-            "-c:a", encoder
         ]
+        
+        if encoder:
+            command += ["-c:a", encoder]
         
         if self.target_bitrate:
             command += ["-b:a", f"{self.target_bitrate}k"]
