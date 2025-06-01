@@ -60,7 +60,7 @@ class Album:
 
         # Restore song references
         song_hashes = data.get("songs", [])
-        album.songs = [song_map[h] for h in song_hashes if h in song_map]
+        album.songs = [song for song in [song_map.get(h, None) for h in song_hashes] if song]
 
         return album
 
