@@ -221,7 +221,7 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
         update_lastfm_serial_with_throttling(song_without_lastfm)
         was_updated = True
         
-    if not was_updated and False:
+    if not was_updated:
         print("Library is up to date. No changes detected.")
         return existing_songs, existing_albums, existing_artists
                 
