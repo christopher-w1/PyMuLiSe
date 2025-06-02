@@ -6,7 +6,7 @@
   <title>PyMuLiSe Web</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-900 text-white font-sans p-4">
+<body class="bg-gray-900 text-white font-sans p-4 pb-24">
   <div class="max-w-6xl mx-auto">
     <h1 class="text-3xl font-bold mb-6">🎵 PyMuLiSe Webinterface</h1>
 
@@ -25,7 +25,6 @@
         <button id="nextButton" onclick="nextPage()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded disabled:opacity-50">Next ➡️</button>
         <select id="artistFilter" onchange="filterArtists()" class="bg-gray-800 text-white p-1 rounded">
           <option value="">All Artists</option>
-          <!-- Options werden dynamisch eingefügt -->
         </select>
       </div>
     </div>
@@ -37,6 +36,12 @@
     </div>
   </div>
 
+  <!-- Globaler Audio-Player -->
+  <div id="globalPlayerContainer" class="fixed bottom-0 left-0 w-full bg-gray-800 border-t border-gray-700 p-2 z-50 flex items-center gap-2">
+    <div id="loadingSpinner" class="hidden animate-spin h-5 w-5 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+    <audio id="globalAudioPlayer" controls class="w-full"></audio>
+  </div>
+
   <script>
     const coverCache = new Map();
     const audioSrcCache = new Map();
@@ -45,8 +50,9 @@
     const artistsPerPage = 10;
     let filteredArtists = [];
     let currentFilter = "";
+    const globalPlayer = document.getElementById("globalAudioPlayer");
+    const loadingSpinner = document.getElementById("loadingSpinner");
 
-    // Hilfsfunktion für einfacheren DOM-Zugriff
     function $(selector) {
       return document.querySelector(selector);
     }
@@ -83,7 +89,6 @@
       coverCache.set(songHash, url);
       return url;
     }
-
 
     function renderArtist(artist) {
       const token = $("#token").value;
@@ -140,18 +145,16 @@
           if (!song) continue;
 
           const songCard = document.createElement("div");
-          songCard.className = "bg-gray-700 p-3 rounded w-48 flex-shrink-0";
+          songCard.className = "bg-gray-700 p-3 rounded w-48 flex-shrink-0 cursor-pointer hover:bg-gray-600";
           songCard.innerHTML = `
             <p class="font-medium truncate">${song.track_number}. ${song.title}</p>
             <p class="text-sm text-gray-400">${formatDuration(song.duration)}</p>
             <p class="text-xs text-gray-500">${song.genres.join(", ")}</p>
             <p class="text-xs">Plays: ${song.play_count}</p>
-            <audio controls class="w-full mt-1" id="player-${song.hash}" data-song-hash="${song.hash}"></audio>
           `;
-          songContainer.appendChild(songCard);
 
-          const player = songCard.querySelector("audio");
-          player.addEventListener("play", async () => {
+          songCard.addEventListener("click", async () => {
+            loadingSpinner.classList.remove("hidden");
             if (!audioSrcCache.has(song.hash)) {
               const res = await fetch("/get_song_file", {
                 method: "POST",
@@ -160,20 +163,25 @@
                   song_hash: song.hash,
                   access_token: token,
                   transcode: true,
-                  format: "opus",
-                  bitrate: 128,
-                  target_lufs: -14
+                  format: "aac",
+                  bitrate: 128
                 })
               });
               if (res.ok) {
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
                 audioSrcCache.set(song.hash, url);
-                player.src = url;
-                player.play();
+                globalPlayer.src = url;
+                globalPlayer.play();
               }
+            } else {
+              globalPlayer.src = audioSrcCache.get(song.hash);
+              globalPlayer.play();
             }
+            loadingSpinner.classList.add("hidden");
           });
+
+          songContainer.appendChild(songCard);
         }
 
         albumDiv.appendChild(albumHeader);
@@ -187,8 +195,6 @@
     function updatePagination() {
       const totalPages = Math.ceil(filteredArtists.length / artistsPerPage);
       $("#pageInfo").textContent = `Seite ${currentPage} von ${totalPages}`;
-      
-      // Buttons aktivieren/deaktivieren
       $("#prevButton").disabled = currentPage === 1;
       $("#nextButton").disabled = currentPage >= totalPages;
     }
@@ -226,7 +232,6 @@
     function filterArtists() {
       currentFilter = $("#artistFilter").value;
       currentPage = 1;
-      
       if (!currentFilter) {
         filteredArtists = [...libraryData.artists];
       } else {
@@ -234,21 +239,16 @@
           artist.name.charAt(0).toUpperCase() === currentFilter
         );
       }
-      
       renderCurrentPage();
     }
 
     function setupArtistFilter() {
       const filterSelect = $("#artistFilter");
-      
-      // Alphabetische Gruppierung erstellen
       const alphabetGroups = new Set();
       libraryData.artists.forEach(artist => {
         const firstLetter = artist.name.charAt(0).toUpperCase();
         alphabetGroups.add(firstLetter);
       });
-      
-      // Alphabetische Optionen hinzufügen
       Array.from(alphabetGroups).sort().forEach(letter => {
         const option = document.createElement("option");
         option.value = letter;
@@ -262,19 +262,14 @@
       container.innerHTML = "";
       $("#loadingIndicator").classList.remove("hidden");
       $("#paginationControls").classList.add("hidden");
-      
+
       try {
         libraryData = await postData("/get_full_library", {});
-        
-        // Alphabetisch sortieren
         libraryData.artists.sort((a, b) => a.name.localeCompare(b.name));
-        
         filteredArtists = [...libraryData.artists];
         currentPage = 1;
-        
         setupArtistFilter();
         renderCurrentPage();
-        
         $("#paginationControls").classList.remove("hidden");
       } catch (error) {
         console.error("Error loading library:", error);
