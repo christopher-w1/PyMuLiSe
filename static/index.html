@@ -71,10 +71,10 @@
     async function fetchCoverArt(songHash, accessToken, size = 128) {
       if (coverCache.has(songHash)) return coverCache.get(songHash);
 
-      const response = await fetch("/get_cover_art", {
+      const response = await fetch(`/get_cover_art?size=${size}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ song_hash: songHash, access_token: accessToken, size: size })
+        body: JSON.stringify({ song_hash: songHash, access_token: accessToken })
       });
 
       if (!response.ok) return null;
