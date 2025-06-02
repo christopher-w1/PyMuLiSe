@@ -36,6 +36,10 @@ class Album:
     def _search_cover(self):
         if not self.cover_art:
             self.cover_art = find_cover_art(self.album_path)
+        if self.cover_art:
+            for song in self.songs:
+                if not song.cover_art:
+                    song.cover_art = self.cover_art
         
     @classmethod
     def from_dict(cls, data: dict, song_map: dict[str, Song]) -> "Album":
