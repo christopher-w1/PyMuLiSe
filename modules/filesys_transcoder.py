@@ -96,7 +96,7 @@ class Transcoding:
         ]
         
         if self.volume_change:
-            command += ["filter:a", "volume={self.volume_change}dB"]
+            command += ["filter:a", f"volume={self.volume_change}dB"]
         
         if encoder:
             command += ["-c:a", encoder]
