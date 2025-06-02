@@ -10,7 +10,6 @@ class Album:
         self.release_year = 0
         self.play_count = 0
         self.songs : list[Song] = []
-        self.path = ""
         self.cover_art = ""
         self.album_path = album_path
         self.loudness = 0
@@ -25,7 +24,6 @@ class Album:
             "release_year": self.release_year,
             "play_count": self.play_count,
             "songs": [song.get_hash() for song in self.songs],
-            "path": self.path,
             "cover_art": self.cover_art,
             "album_path": self.album_path,
             "loudness": self.loudness,
@@ -64,7 +62,6 @@ class Album:
         album.loudness = data.get("loudness", 0)
         album.peak = data.get("peak", 0)
         album.hash = data.get("hash", "")
-        album.path = data.get("path", "")
 
         # Restore song references
         song_hashes = data.get("songs", [])

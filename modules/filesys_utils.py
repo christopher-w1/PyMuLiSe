@@ -108,6 +108,7 @@ def find_cover_art(file_path: str) -> str:
         directory = os.path.dirname(file_path)
     except:
         return ""
+    print(f"Try to find cover in {directory}...")
     image_extensions = [".jpg", ".jpeg", ".png", ".webp"]
     preferred_names = ["cover", "folder", "front", "album"]
     any_image = ""
