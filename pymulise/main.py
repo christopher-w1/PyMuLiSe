@@ -196,7 +196,7 @@ async def get_song_file(request: Request, background_tasks: BackgroundTasks):
                 target_format=format_override,
                 target_bitrate=bitrate,
                 cache_dir="./transcode_cache",
-                volume_change=min(song.peak or 0, target_lufs - song.loudness) if song.loudness and target_lufs else 0
+                volume_change=min(song.peak or 0, target_lufs - (song.loudness or -7)) if target_lufs else 0
             )
             output_file = transcoder.run()
             mime_type = f"audio/{format_override}"
