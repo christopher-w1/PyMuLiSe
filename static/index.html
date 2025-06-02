@@ -68,13 +68,13 @@
       return `${minutes}:${secs}`;
     }
 
-    async function fetchCoverArt(songHash, accessToken) {
+    async function fetchCoverArt(songHash, accessToken, size = 128) {
       if (coverCache.has(songHash)) return coverCache.get(songHash);
 
       const response = await fetch("/get_cover_art", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ song_hash: songHash, access_token: accessToken })
+        body: JSON.stringify({ song_hash: songHash, access_token: accessToken, size: size })
       });
 
       if (!response.ok) return null;
@@ -83,6 +83,7 @@
       coverCache.set(songHash, url);
       return url;
     }
+
 
     function renderArtist(artist) {
       const token = $("#token").value;
@@ -121,16 +122,17 @@
         const songContainer = document.createElement("div");
         songContainer.className = "flex flex-wrap gap-4 hidden";
 
-        albumHeader.onclick = async () => {
-          songContainer.classList.toggle("hidden");
-
-          if (!coverImg.src && album.songs.length > 0) {
-            const url = await fetchCoverArt(album.songs[0], token);
+        if (album.songs.length > 0) {
+          fetchCoverArt(album.songs[0], token, 128).then(url => {
             if (url) {
               coverImg.src = url;
               coverImg.classList.remove("hidden");
             }
-          }
+          });
+        }
+
+        albumHeader.onclick = () => {
+          songContainer.classList.toggle("hidden");
         };
 
         for (const songHash of album.songs) {
