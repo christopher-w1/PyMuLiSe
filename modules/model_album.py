@@ -34,7 +34,7 @@ class Album:
         }
         
     def _search_cover(self):
-        if not self.cover_art:
+        if not self.cover_art or len(self.cover_art) < 5:
             self.cover_art = find_cover_art(self.album_path)
         if self.cover_art:
             for song in self.songs:
