@@ -104,11 +104,8 @@ def extract_cover(file_path: str) -> str:
     return ""
 
 def find_cover_art(file_path: str) -> str:
-    try:
-        directory = os.path.dirname(file_path)
-    except:
-        return ""
-    print(f"Try to find cover in {directory}...")
+    directory = file_path if os.path.isdir(file_path) else os.path.dirname(file_path)
+    #print(f"Try to find cover in {directory}...")
     image_extensions = [".jpg", ".jpeg", ".png", ".webp"]
     preferred_names = ["cover", "folder", "front", "album"]
     any_image = ""
