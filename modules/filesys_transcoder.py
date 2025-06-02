@@ -31,12 +31,13 @@ def get_encoder_for_format(fmt: str) -> str | None:
     return None
 
 class Transcoding:
-    def __init__(self, song_hash: str, src_file: str, target_format: str, target_bitrate: int | None, cache_dir: str):
+    def __init__(self, song_hash: str, src_file: str, target_format: str, target_bitrate: int | None, cache_dir: str, volume_change: float = 0):
         self.song_hash = song_hash
         self.src_file = src_file
         self.target_format = target_format.lower()
         self.target_bitrate = target_bitrate
         self.cache_dir = cache_dir
+        self.volume_change = volume_change
         os.makedirs(self.cache_dir, exist_ok=True)
         self.output_file = self._build_output_path()
 
@@ -93,6 +94,9 @@ class Transcoding:
             "-vn",             
             "-y",
         ]
+        
+        if self.volume_change:
+            command += ["filter:a", "volume={self.volume_change}dB"]
         
         if encoder:
             command += ["-c:a", encoder]

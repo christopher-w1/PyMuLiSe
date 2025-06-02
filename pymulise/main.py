@@ -178,6 +178,7 @@ async def get_song_file(request: Request, background_tasks: BackgroundTasks):
     transcode = body.get("transcode", False)
     format_override = body.get("format", "mp3")
     bitrate = body.get("bitrate", 192)
+    target_lufs = float(body.get("target_lufs", 0))
 
     song = await libraryService.get_song(song_hash)
     if not song:
@@ -194,7 +195,8 @@ async def get_song_file(request: Request, background_tasks: BackgroundTasks):
                 src_file=file_path,
                 target_format=format_override,
                 target_bitrate=bitrate,
-                cache_dir="./transcode_cache"
+                cache_dir="./transcode_cache",
+                volume_change=min(song.peak or 0, target_lufs - song.loudness) if song.loudness and target_lufs else 0
             )
             output_file = transcoder.run()
             mime_type = f"audio/{format_override}"
