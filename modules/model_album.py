@@ -33,6 +33,10 @@ class Album:
             "hash": self.hash
         }
         
+    def _search_cover(self):
+        if not self.cover_art:
+            self.cover_art = find_cover_art(self.album_path)
+        
     @classmethod
     def from_dict(cls, data: dict, song_map: dict[str, Song]) -> "Album":
         """
@@ -61,7 +65,7 @@ class Album:
         # Restore song references
         song_hashes = data.get("songs", [])
         album.songs = [song for song in [song_map.get(h, None) for h in song_hashes] if song]
-
+        album._search_cover()
         return album
 
         
