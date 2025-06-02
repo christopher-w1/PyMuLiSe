@@ -11,7 +11,7 @@ class Album:
         self.play_count = 0
         self.songs : list[Song] = []
         self.path = ""
-        self.cover_art = find_cover_art(album_path)
+        self.cover_art = ""
         self.album_path = album_path
         self.loudness = 0
         self.peak = 0
@@ -154,6 +154,8 @@ class Album:
         """
         if isinstance(song, Song):
             self.songs.append(song)
+            if song.cover_art and not self.cover_art:
+                self.cover_art = song.cover_art
             self._retag_from_songs()
             self._sort_by_track_number()
         else:
