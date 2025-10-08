@@ -86,6 +86,47 @@ async def get_songs(request: Request):
     return {"songs": [song.to_dict() for song in all_songs]}
 
 
+@app.post("/search_songs")
+async def search_songs(request: Request):
+    body = await request.json()
+    access_token = body.get("access_token")
+    if not access_token or not check_access_token(access_token):
+        raise HTTPException(status_code=401, detail="Invalid access token")
+
+    query = body.get("query", "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query is required")
+
+    if len(query) < 3:
+        return {"songs": []}
+
+    all_songs, _, _ = await libraryService.get_snapshot()
+    if not all_songs:
+        raise HTTPException(status_code=500, detail="Library is empty")
+
+    # Exact match first by using jaccard similarity
+    results = []
+    for song in all_songs:
+        query_set = set(query.lower().split())
+        song_set = set(song.title.lower().split()) | set(song.get_artists().lower().split()) | set(song.album.lower().split())
+
+        score = 0
+        for word in query_set:
+            if word in song_set:
+                score += 2
+            elif any(word in s for s in song_set):
+                score += 1
+
+        if score > 0:
+            song_dict = song.to_dict()
+            song_dict["search_score"] = score
+            results.append(song_dict)
+
+    # Sort descending
+    results.sort(key=lambda x: x["search_score"], reverse=True)
+    return results[:20]
+
+
 @app.post("/get_artists")
 async def get_artists(request: Request):
     body = await request.json()
