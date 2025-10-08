@@ -1,4 +1,5 @@
 import os, mimetypes, io
+from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -244,7 +245,7 @@ async def get_song_file_from_metadata(request: Request):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Song file not found")
 
-    # MIME-Type automatisch bestimmen
+    # Try to guess mime type
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type is None:
         mime_type = "application/octet-stream"
@@ -254,6 +255,62 @@ async def get_song_file_from_metadata(request: Request):
         media_type=mime_type,
         filename=os.path.basename(file_path)
     )
+    
+
+@app.get("/stream/{song_hash}")
+async def stream_song(song_hash: str, request: Request):
+    # Find file path from song hash
+    song = await libraryService.get_song(song_hash)
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    file_path = Path(song.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Original file not found")
+
+    # Handle Range requests
+    range_header = request.headers.get("range")
+    file_size = file_path.stat().st_size
+    start = 0
+    end = file_size - 1
+
+    if range_header:
+        bytes_range = range_header.strip().split("=")[-1]
+        start_end = bytes_range.split("-")
+
+        if start_end[0]:
+            start = int(start_end[0])
+        if len(start_end) > 1 and start_end[1]:
+            end = int(start_end[1])
+
+        if start >= file_size:
+            raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+
+    chunk_size = end - start + 1
+
+    # Read file chunks
+    def iterfile():
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            remaining = chunk_size
+            while remaining > 0:
+                chunk = f.read(min(4096, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    mime_type = "audio/mp4"
+
+    headers = {
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(chunk_size),
+        "Content-Type": mime_type,
+    }
+
+    status_code = 206 if range_header else 200
+    return StreamingResponse(iterfile(), headers=headers, status_code=status_code)
         
         
 @app.get("/api")
