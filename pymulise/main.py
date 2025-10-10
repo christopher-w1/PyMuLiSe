@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi import Query
 from PIL import Image
 from modules.library_service import LibraryService
+from modules.user_service import UserService
 from modules.filesys_transcoder import Transcoding
 from contextlib import asynccontextmanager
 
@@ -16,6 +17,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 libraryService = LibraryService()
+userService = UserService(registration_key="pymulise")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -375,6 +377,33 @@ async def serve_frontend():
         return HTMLResponse(content="index.html nicht gefunden", status_code=404)
     with open(index_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read(), status_code=200)
+        
+@app.post("/register")
+async def register(request: Request):
+    data = await request.json()
+    try:
+        await user_service.register(
+            data.get("registration_key"),
+            data.get("email"),
+            data.get("username"),
+            data.get("password"),
+            data.get("lastfm_user"),
+        )
+        return {"status": "ok"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/login")
+async def login(request: Request):
+    data = await request.json()
+    try:
+        username, session_key = await user_service.login(
+            data.get("email"),
+            data.get("password")
+        )
+        return {"username": username, "session_key": session_key}
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
         
 def main():
     import uvicorn
