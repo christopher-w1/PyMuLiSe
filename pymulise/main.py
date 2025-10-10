@@ -54,12 +54,39 @@ def schedule_cleanup(path: str, delay_sec: int = 600):
             print(f"Cleanup failed: {e}")
     threading.Thread(target=cleanup, daemon=True).start()
 
+def require_session(user_service: "UserService", key_name="session_key"):
+    """
+    Decorator für FastAPI routes. Extracts session key from request (JSON body or query param),
+    verifies it, and injects the user object as a keyword argument to the route.
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, request: Request, **kwargs):
+            # Session-Key zuerst aus JSON Body, dann Query
+            try:
+                data = await request.json()
+            except:
+                data = {}
+            session_key = data.get(key_name) or request.query_params.get(key_name)
+
+            if not session_key:
+                raise HTTPException(status_code=401, detail="Session key missing")
+
+            user = await user_service.get_user_by_session(session_key)
+            if not user:
+                raise HTTPException(status_code=401, detail="Invalid session key")
+
+            # user als Keyword-Argument an die Route weitergeben
+            kwargs["user"] = user
+            return await func(*args, request=request, **kwargs)
+        return wrapper
+    return decorator
+
+
+@require_session(userService)
 @app.post("/get_songs")
-async def get_songs(request: Request):
+async def get_songs(request: Request, user: User):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
     filter_params = body.get("filter_params")
     all_songs, _, _ = await libraryService.get_snapshot()
     if filter_params and type(filter_params) == dict:
@@ -87,13 +114,10 @@ async def get_songs(request: Request):
         return {"songs": [song.to_dict() for song in filtered_songs]}
     return {"songs": [song.to_dict() for song in all_songs]}
 
-
+@require_session(userService)
 @app.post("/search_songs")
-async def search_songs(request: Request):
+async def search_songs(request: Request, user: User):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
 
     query = body.get("query", "").strip()
     if not query:
@@ -129,44 +153,38 @@ async def search_songs(request: Request):
     return results[:20]
 
 
+@require_session(userService)
 @app.post("/get_artists")
-async def get_artists(request: Request):
+async def get_artists(request: Request, user: User):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
     _, _, all_artists = await libraryService.get_snapshot()
     return {"artists": [artist.to_dict() for artist in all_artists]}
 
 
+@require_session(userService)
 @app.post("/get_albums")
-async def get_albums(request: Request):
+async def get_albums(request: Request, user: User):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
     _, all_albums, _ = await libraryService.get_snapshot()
     return {"albums": [album.to_dict() for album in all_albums]}
 
 
+@require_session(userService)
 @app.post("/get_full_library")
-async def get_library(request: Request):
+async def get_library(request: Request, user: User):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
+
     all_songs, all_albums, all_artists = await libraryService.get_snapshot()
     return {"songs": [song.to_dict() for song in all_songs],
             "artists": [artist.to_dict() for artist in all_artists],
             "albums": [album.to_dict() for album in all_albums]}
 
 
+@require_session(userService)
 @app.post("/get_song_details")
-async def get_song_details(request: Request):
+async def get_song_details(request: Request, user: User):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
+
     song_hash = body.get("song_hash")
     if not song_hash:
         raise HTTPException(status_code=400, detail="Missing song hash")
@@ -179,12 +197,11 @@ async def get_song_details(request: Request):
     return {}
 
 
+@require_session(userService)
 @app.post("/get_cover_art")
 async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, le=1000)):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
+
     song_hash = body.get("song_hash")
     if not song_hash:
         raise HTTPException(status_code=400, detail="Missing song hash")
@@ -207,13 +224,10 @@ async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, l
     return StreamingResponse(buf, media_type="image/jpeg", headers={"Content-Disposition": f"inline; filename={song_hash}.jpg"})
 
 
-
+@require_session(userService)
 @app.post("/get_song_file")
 async def get_song_file(request: Request, background_tasks: BackgroundTasks):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
 
     song_hash = body.get("song_hash")
     if not song_hash:
@@ -266,12 +280,10 @@ async def get_song_file(request: Request, background_tasks: BackgroundTasks):
     )
 
 
+@require_session(userService)
 @app.post("/get_song_file_from_metadata")
-async def get_song_file_from_metadata(request: Request):
+async def get_song_file_from_metadata(request: Request, user: User):
     body = await request.json()
-    access_token = body.get("access_token")
-    if not access_token or not check_access_token(access_token):
-        raise HTTPException(status_code=401, detail="Invalid access token")
 
     metadata = body.get("metadata")
     if not metadata:
@@ -300,8 +312,9 @@ async def get_song_file_from_metadata(request: Request):
     )
     
 
+@require_session(userService)
 @app.get("/stream/{song_hash}")
-async def stream_song(song_hash: str, request: Request):
+async def stream_song(song_hash: str, request: Request, user: User):
     # Find file path from song hash
     song = await libraryService.get_song(song_hash)
     if not song:
@@ -356,28 +369,6 @@ async def stream_song(song_hash: str, request: Request):
     return StreamingResponse(iterfile(), headers=headers, status_code=status_code)
         
         
-@app.get("/api")
-async def api_info():
-    return {"message": "Welcome to the PyMuLiSe API!",
-            "status": "running",
-            "available_endpoints": [
-                "/get_songs",
-                "/get_artists",
-                "/get_albums",
-                "/get_song_details",
-                "/get_cover_art",
-                "/get_song_file",
-                "/get_song_file_from_metadata"
-            ]}
-    
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
-    index_path = os.path.join(STATIC_DIR, "index.html")
-    if not os.path.exists(index_path):
-        return HTMLResponse(content="index.html nicht gefunden", status_code=404)
-    with open(index_path, "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read(), status_code=200)
-        
 @app.post("/register")
 async def register(request: Request):
     data = await request.json()
@@ -393,6 +384,7 @@ async def register(request: Request):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @app.post("/login")
 async def login(request: Request):
     data = await request.json()
@@ -405,10 +397,12 @@ async def login(request: Request):
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
         
+        
 def main():
     import uvicorn
     rest_api_port = int(os.getenv("REST_API_PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=rest_api_port)
+
 
 if __name__ == "__main__":
     main()
