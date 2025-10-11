@@ -7,9 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import BackgroundTasks
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
-from fastapi import Query
+from fastapi import Query, WebSocket
 from PIL import Image
-from modules import user_service
+from modules.playback_module import PlaybackChannel, PlaybackModule
 from modules.library_service import LibraryService
 from modules.user_service import UserService
 from modules.filesys_transcoder import Transcoding
@@ -19,12 +19,13 @@ from hashlib import sha256
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-libraryService = LibraryService()
-userService = UserService(registration_key="pymulise")
+library_service = LibraryService()
+user_service = UserService(registration_key="pymulise")
+playback_module = PlaybackModule()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await libraryService.start_background_task()
+    await library_service.start_background_task()
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -49,7 +50,7 @@ def schedule_cleanup(path: str, delay_sec: int = 600):
             print(f"Cleanup failed: {e}")
     threading.Thread(target=cleanup, daemon=True).start()
 
-def require_session(user_service: "UserService", key_name="session_key"):
+def require_session(user_service: UserService, key_name="session_key"):
     """
     Decorator für FastAPI routes. Extracts session key from request (JSON body or query param),
     verifies it, and injects the user object as a keyword argument to the route.
@@ -67,23 +68,24 @@ def require_session(user_service: "UserService", key_name="session_key"):
             if not session_key:
                 raise HTTPException(status_code=401, detail="Session key missing")
 
-            email = await user_service.get_user_email_by_session(session_key)
-            if not email:
+            user = await user_service.get_user_by_session(session_key)
+            if not user:
                 raise HTTPException(status_code=401, detail="Invalid session key")
 
             # user als Keyword-Argument an die Route weitergeben
-            kwargs["email"] = email
+            kwargs["email"] = user["email"]
+            kwargs["username"] = user["username"]
             return await func(*args, request=request, **kwargs)
         return wrapper
     return decorator
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/get_songs")
 async def get_songs(request: Request, email: str):
     body = await request.json()
     filter_params = body.get("filter_params")
-    all_songs, _, _ = await libraryService.get_snapshot()
+    all_songs, _, _ = await library_service.get_snapshot()
     if filter_params and type(filter_params) == dict:
         filter_title = filter_params.get("title", None)
         filter_artist = filter_params.get("artist", None)
@@ -110,7 +112,7 @@ async def get_songs(request: Request, email: str):
     return {"songs": [song.to_dict() for song in all_songs]}
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/search_songs")
 async def search_songs(request: Request, email: str):
     body = await request.json()
@@ -122,7 +124,7 @@ async def search_songs(request: Request, email: str):
     if len(query) < 3:
         return {"songs": []}
 
-    all_songs, _, _ = await libraryService.get_snapshot()
+    all_songs, _, _ = await library_service.get_snapshot()
     if not all_songs:
         raise HTTPException(status_code=500, detail="Library is empty")
 
@@ -149,34 +151,34 @@ async def search_songs(request: Request, email: str):
     return results[:20]
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/get_artists")
 async def get_artists(request: Request, email: str):
     body = await request.json()
-    _, _, all_artists = await libraryService.get_snapshot()
+    _, _, all_artists = await library_service.get_snapshot()
     return {"artists": [artist.to_dict() for artist in all_artists]}
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/get_albums")
 async def get_albums(request: Request, email: str):
     body = await request.json()
-    _, all_albums, _ = await libraryService.get_snapshot()
+    _, all_albums, _ = await library_service.get_snapshot()
     return {"albums": [album.to_dict() for album in all_albums]}
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/get_full_library")
 async def get_library(request: Request, email: str):
     body = await request.json()
 
-    all_songs, all_albums, all_artists = await libraryService.get_snapshot()
+    all_songs, all_albums, all_artists = await library_service.get_snapshot()
     return {"songs": [song.to_dict() for song in all_songs],
             "artists": [artist.to_dict() for artist in all_artists],
             "albums": [album.to_dict() for album in all_albums]}
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/get_song_details")
 async def get_song_details(request: Request, email: str):
     body = await request.json()
@@ -184,16 +186,16 @@ async def get_song_details(request: Request, email: str):
     song_hash = body.get("song_hash")
     if not song_hash:
         raise HTTPException(status_code=400, detail="Missing song hash")
-    if not await libraryService.has_song(song_hash):
+    if not await library_service.has_song(song_hash):
         raise HTTPException(status_code=404, detail="Song not found in library")
-    all_songs, _, _ = await libraryService.get_snapshot()
+    all_songs, _, _ = await library_service.get_snapshot()
     for song in all_songs:
         if song.get_hash() == song_hash:
             return {"song": song.to_dict()}
     return {}
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/get_cover_art")
 async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, le=1000)):
     body = await request.json()
@@ -201,9 +203,9 @@ async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, l
     song_hash = body.get("song_hash")
     if not song_hash:
         raise HTTPException(status_code=400, detail="Missing song hash")
-    if not await libraryService.has_song(song_hash):
+    if not await library_service.has_song(song_hash):
         raise HTTPException(status_code=404, detail="Song not found in library")
-    file_path = libraryService.cover_map.get(song_hash)
+    file_path = library_service.cover_map.get(song_hash)
     if not file_path:
         raise HTTPException(status_code=404, detail="Cover art not found")
     
@@ -221,7 +223,7 @@ async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, l
     return StreamingResponse(buf, media_type="image/jpeg", headers={"Content-Disposition": f"inline; filename={file_hash}.jpg"})
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/get_song_file")
 async def get_song_file(request: Request, background_tasks: BackgroundTasks):
     body = await request.json()
@@ -235,7 +237,7 @@ async def get_song_file(request: Request, background_tasks: BackgroundTasks):
     bitrate = body.get("bitrate", 192)
     target_lufs = float(body.get("target_lufs", 0))
 
-    song = await libraryService.get_song(song_hash)
+    song = await library_service.get_song(song_hash)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
 
@@ -277,7 +279,7 @@ async def get_song_file(request: Request, background_tasks: BackgroundTasks):
     )
 
 
-@require_session(userService)
+@require_session(user_service)
 @app.post("/get_song_file_from_metadata")
 async def get_song_file_from_metadata(request: Request, email: str):
     body = await request.json()
@@ -289,7 +291,7 @@ async def get_song_file_from_metadata(request: Request, email: str):
     if not isinstance(metadata, dict):
         raise HTTPException(status_code=400, detail="Metadata must be a dictionary")
 
-    song = await libraryService.get_song_by_metadata(metadata)
+    song = await library_service.get_song_by_metadata(metadata)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found in library")
 
@@ -309,11 +311,11 @@ async def get_song_file_from_metadata(request: Request, email: str):
     )
     
 
-@require_session(userService)
+@require_session(user_service)
 @app.get("/stream/{song_hash}")
 async def stream_song(song_hash: str, request: Request, email: str):
     # Find file path from song hash
-    song = await libraryService.get_song(song_hash)
+    song = await library_service.get_song(song_hash)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
 
@@ -364,13 +366,47 @@ async def stream_song(song_hash: str, request: Request, email: str):
 
     status_code = 206 if range_header else 200
     return StreamingResponse(iterfile(), headers=headers, status_code=status_code)
+
+
+@app.websocket("/ws/playback/{owner_id}?playlist={playlist}")
+async def playback_ws(websocket: WebSocket, owner_id: str, playlist: list[str], session_key: str = Query(...)):
+    """
+    WebSocket endpoint for playback module.
+    Query parameters:
+    - owner_id: ID (email) of the channel owner (creator)
+    - playlist: List of song hashes to play
+    - session_key: Session key of the connecting user
+    """
+    # Get user email from session key, reject if invalid
+    user = await user_service.get_user_by_session(session_key)
+    if not user:
+        await websocket.close(code=4401)
+        return
+
+    # Check if channel exists, create if owner
+    channel = await playback_module.get_channel(owner_id)
+    if not channel:
+        if session_key == owner_id:
+            channel = await playback_module.create_channel(owner_id, playlist)
+        else:
+            await websocket.close(code=4404)
+            return
+
+    await channel.join(user["email"], websocket)
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            await channel.handle_message(user["email"], data)
+    except:
+        await channel.leave(session_key)
         
         
 @app.post("/register")
 async def register(request: Request):
     data = await request.json()
     try:
-        await userService.register(
+        await user_service.register(
             data.get("registration_key"),
             data.get("email"),
             data.get("username"),
@@ -386,7 +422,7 @@ async def register(request: Request):
 async def login(request: Request):
     data = await request.json()
     try:
-        username, session_key = await userService.login(
+        username, session_key = await user_service.login(
             data.get("email"),
             data.get("password")
         )

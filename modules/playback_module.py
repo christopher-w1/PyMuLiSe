@@ -92,12 +92,12 @@ class PlaybackModule:
         self.channels: Dict[str, PlaybackChannel] = {}
         self.lock = asyncio.Lock()
 
-    async def create_channel(self, owner_email: str, playlist: List[str]) -> PlaybackChannel:
+    async def create_channel(self, owner_id: str, playlist: List[str]) -> PlaybackChannel:
         async with self.lock:
-            if owner_email in self.channels:
+            if owner_id in self.channels:
                 raise ValueError("Channel already exists")
-            channel = PlaybackChannel(owner_email, playlist)
-            self.channels[owner_email] = channel
+            channel = PlaybackChannel(owner_id, playlist)
+            self.channels[owner_id] = channel
             return channel
 
     async def get_channel(self, owner_email: str) -> Optional[PlaybackChannel]:
