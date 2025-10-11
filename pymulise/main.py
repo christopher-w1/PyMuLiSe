@@ -50,7 +50,7 @@ def schedule_cleanup(path: str, delay_sec: int = 600):
             print(f"Cleanup failed: {e}")
     threading.Thread(target=cleanup, daemon=True).start()
 
-def require_session(user_service: UserService, key_name="session_key"):
+def require_session(user_service: "UserService", key_name="session_key"):
     """
     Decorator für FastAPI routes. Extracts session key from request (JSON body or query param),
     verifies it, and injects the user object as a keyword argument to the route.
@@ -368,8 +368,8 @@ async def stream_song(song_hash: str, request: Request, email: str):
     return StreamingResponse(iterfile(), headers=headers, status_code=status_code)
 
 
-@app.websocket("/ws/playback/{owner_id}?playlist={playlist}")
-async def playback_ws(websocket: WebSocket, owner_id: str, playlist: list[str], session_key: str = Query(...)):
+@app.websocket("/ws/playback/owner={owner_id}?song={song_id}")
+async def playback_ws(websocket: WebSocket, owner_id: str, song_id: str | None, session_key: str = Query(...)):
     """
     WebSocket endpoint for playback module.
     Query parameters:
@@ -386,8 +386,8 @@ async def playback_ws(websocket: WebSocket, owner_id: str, playlist: list[str], 
     # Check if channel exists, create if owner
     channel = await playback_module.get_channel(owner_id)
     if not channel:
-        if session_key == owner_id:
-            channel = await playback_module.create_channel(owner_id, playlist)
+        if session_key == owner_id and song_id:
+            channel = await playback_module.create_channel(owner_id, [song_id])
         else:
             await websocket.close(code=4404)
             return
@@ -413,7 +413,16 @@ async def register(request: Request):
             data.get("password"),
             data.get("lastfm_user"),
         )
-        return {"status": "ok"}
+        username, session_key = await user_service.login(
+            data.get("email"),
+            data.get("password")
+        )
+        if not session_key:
+            raise HTTPException(status_code=500, detail="Login failed after registration")
+        return {"status": "ok",
+                "username": username, 
+                "session_key": session_key,
+                "email": data.get("email")}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -426,7 +435,11 @@ async def login(request: Request):
             data.get("email"),
             data.get("password")
         )
-        return {"username": username, "session_key": session_key}
+        
+        return {"status": "ok",
+                "username": username, 
+                "session_key": session_key,
+                "email": data.get("email")}
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
         
