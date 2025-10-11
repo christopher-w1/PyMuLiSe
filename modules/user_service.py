@@ -24,14 +24,14 @@ class UserService:
             os.replace(tmp_file, self.users_file)
 
     @staticmethod
-    def _hash_password(password, salt=None):
+    def _hash_password(password, salt=None) -> tuple[str, str]:
         import os
         if salt is None:
             salt = os.urandom(16).hex()
         hashed = hashlib.sha256((salt + password).encode()).hexdigest()
         return hashed, salt
 
-    async def register(self, registration_key, email, username, password, lastfm_user=None):
+    async def register(self, registration_key, email, username, password, lastfm_user=None) -> None:
         if registration_key != self.registration_key:
             raise ValueError("Invalid registration key")
         if not email or not username or not password:
@@ -51,7 +51,7 @@ class UserService:
             }
             await self._save_users()
 
-    async def login(self, email, password):
+    async def login(self, email, password) -> tuple[str, str]:
         user = self.users.get(email)
         if not user:
             raise ValueError("Invalid credentials")
@@ -64,7 +64,7 @@ class UserService:
         self.sessions[session_key] = {"email": email, "created": time.time()}
         return user["username"], session_key
 
-    async def get_user_email_by_session(self, session_key):
+    async def get_user_by_session(self, session_key) -> dict | None:
         session = self.sessions.get(session_key)
         if not session:
             return None
