@@ -14,6 +14,7 @@ from modules.library_service import LibraryService
 from modules.user_service import UserService
 from modules.filesys_transcoder import Transcoding
 from contextlib import asynccontextmanager
+from hashlib import sha256
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -35,14 +36,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-def check_access_token(token: str) -> bool:
-    valid_token = os.getenv("ACCESS_TOKEN")
-    if not valid_token:
-        return True
-    print(f"Valid token: {valid_token}")
-    print(f"Provided token: {token}")
-    return token == valid_token
 
 def schedule_cleanup(path: str, delay_sec: int = 600):
     import threading, time
@@ -115,6 +108,7 @@ async def get_songs(request: Request, email: str):
                      (filter_hash is None or filter_hash == song.get_hash())]
         return {"songs": [song.to_dict() for song in filtered_songs]}
     return {"songs": [song.to_dict() for song in all_songs]}
+
 
 @require_session(userService)
 @app.post("/search_songs")
@@ -213,8 +207,9 @@ async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, l
     if not file_path:
         raise HTTPException(status_code=404, detail="Cover art not found")
     
+    file_hash = sha256(file_path.encode()).hexdigest()
     if size is None:
-        return FileResponse(file_path, media_type="image/jpeg", filename=f"{song_hash}.jpg")
+        return FileResponse(file_path, media_type="image/jpeg", filename=f"{file_hash}.jpg")
 
     img = Image.open(file_path)
     x, y = img.size
@@ -223,7 +218,7 @@ async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, l
     buf = io.BytesIO()
     img.save(buf, format="JPEG")
     buf.seek(0)
-    return StreamingResponse(buf, media_type="image/jpeg", headers={"Content-Disposition": f"inline; filename={song_hash}.jpg"})
+    return StreamingResponse(buf, media_type="image/jpeg", headers={"Content-Disposition": f"inline; filename={file_hash}.jpg"})
 
 
 @require_session(userService)
