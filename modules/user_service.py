@@ -64,7 +64,7 @@ class UserService:
         self.sessions[session_key] = {"email": email, "created": time.time()}
         return user["username"], session_key
 
-    async def get_user_by_session(self, session_key):
+    async def get_user_email_by_session(self, session_key):
         session = self.sessions.get(session_key)
         if not session:
             return None

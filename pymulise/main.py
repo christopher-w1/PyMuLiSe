@@ -1,3 +1,4 @@
+from functools import wraps
 import os, mimetypes, io
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
@@ -8,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi import Query
 from PIL import Image
+from modules import user_service
 from modules.library_service import LibraryService
 from modules.user_service import UserService
 from modules.filesys_transcoder import Transcoding
@@ -72,12 +74,12 @@ def require_session(user_service: "UserService", key_name="session_key"):
             if not session_key:
                 raise HTTPException(status_code=401, detail="Session key missing")
 
-            user = await user_service.get_user_by_session(session_key)
-            if not user:
+            email = await user_service.get_user_email_by_session(session_key)
+            if not email:
                 raise HTTPException(status_code=401, detail="Invalid session key")
 
             # user als Keyword-Argument an die Route weitergeben
-            kwargs["user"] = user
+            kwargs["email"] = email
             return await func(*args, request=request, **kwargs)
         return wrapper
     return decorator
@@ -85,7 +87,7 @@ def require_session(user_service: "UserService", key_name="session_key"):
 
 @require_session(userService)
 @app.post("/get_songs")
-async def get_songs(request: Request, user: User):
+async def get_songs(request: Request, email: str):
     body = await request.json()
     filter_params = body.get("filter_params")
     all_songs, _, _ = await libraryService.get_snapshot()
@@ -116,7 +118,7 @@ async def get_songs(request: Request, user: User):
 
 @require_session(userService)
 @app.post("/search_songs")
-async def search_songs(request: Request, user: User):
+async def search_songs(request: Request, email: str):
     body = await request.json()
 
     query = body.get("query", "").strip()
@@ -155,7 +157,7 @@ async def search_songs(request: Request, user: User):
 
 @require_session(userService)
 @app.post("/get_artists")
-async def get_artists(request: Request, user: User):
+async def get_artists(request: Request, email: str):
     body = await request.json()
     _, _, all_artists = await libraryService.get_snapshot()
     return {"artists": [artist.to_dict() for artist in all_artists]}
@@ -163,7 +165,7 @@ async def get_artists(request: Request, user: User):
 
 @require_session(userService)
 @app.post("/get_albums")
-async def get_albums(request: Request, user: User):
+async def get_albums(request: Request, email: str):
     body = await request.json()
     _, all_albums, _ = await libraryService.get_snapshot()
     return {"albums": [album.to_dict() for album in all_albums]}
@@ -171,7 +173,7 @@ async def get_albums(request: Request, user: User):
 
 @require_session(userService)
 @app.post("/get_full_library")
-async def get_library(request: Request, user: User):
+async def get_library(request: Request, email: str):
     body = await request.json()
 
     all_songs, all_albums, all_artists = await libraryService.get_snapshot()
@@ -182,7 +184,7 @@ async def get_library(request: Request, user: User):
 
 @require_session(userService)
 @app.post("/get_song_details")
-async def get_song_details(request: Request, user: User):
+async def get_song_details(request: Request, email: str):
     body = await request.json()
 
     song_hash = body.get("song_hash")
@@ -282,7 +284,7 @@ async def get_song_file(request: Request, background_tasks: BackgroundTasks):
 
 @require_session(userService)
 @app.post("/get_song_file_from_metadata")
-async def get_song_file_from_metadata(request: Request, user: User):
+async def get_song_file_from_metadata(request: Request, email: str):
     body = await request.json()
 
     metadata = body.get("metadata")
@@ -314,7 +316,7 @@ async def get_song_file_from_metadata(request: Request, user: User):
 
 @require_session(userService)
 @app.get("/stream/{song_hash}")
-async def stream_song(song_hash: str, request: Request, user: User):
+async def stream_song(song_hash: str, request: Request, email: str):
     # Find file path from song hash
     song = await libraryService.get_song(song_hash)
     if not song:
@@ -373,7 +375,7 @@ async def stream_song(song_hash: str, request: Request, user: User):
 async def register(request: Request):
     data = await request.json()
     try:
-        await user_service.register(
+        await userService.register(
             data.get("registration_key"),
             data.get("email"),
             data.get("username"),
@@ -389,7 +391,7 @@ async def register(request: Request):
 async def login(request: Request):
     data = await request.json()
     try:
-        username, session_key = await user_service.login(
+        username, session_key = await userService.login(
             data.get("email"),
             data.get("password")
         )
