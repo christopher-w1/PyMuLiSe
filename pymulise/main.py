@@ -1,6 +1,7 @@
 from functools import wraps
 import os, mimetypes, io
 from pathlib import Path
+from typing import Optional
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -313,7 +314,7 @@ async def get_song_file_from_metadata(request: Request, email: str):
 
 @require_session(user_service)
 @app.get("/stream/{song_hash}")
-async def stream_song(song_hash: str, request: Request, email: str):
+async def stream_song(song_hash: str, request: Request, email: Optional[str] = None):
     # Find file path from song hash
     song = await library_service.get_song(song_hash)
     if not song:
