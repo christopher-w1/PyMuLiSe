@@ -15,13 +15,13 @@ class UserService:
                 self.users = json.load(f)
         else:
             self.users = {}
+            with open("data/users.json", "w", encoding="utf-8") as f:
+                json.dump(self.users, f, ensure_ascii=False, indent=2)
 
     async def _save_users(self):
         async with self.lock:
-            tmp_file = self.users_file + ".tmp"
-            with open(tmp_file, "w") as f:
-                json.dump(self.users, f, indent=2)
-            os.replace(tmp_file, self.users_file)
+            with open(self.users_file, "w", encoding="utf-8") as f:
+                json.dump(self.users, f, ensure_ascii=False, indent=2)
 
     @staticmethod
     def _hash_password(password, salt=None) -> tuple[str, str]:
