@@ -183,7 +183,7 @@ class Song:
         for artist in [self.album_artist] + self.other_artists:
             if artist.lower().strip() in VARIOUS_ARTISTS:
                 various = True
-            else:
+            elif len(artist) > 2:
                 artists.append(artist)
         return ", ".join(list(set(artists))) if artists else (
             "Various Artists" if various else "Unknown Artist")
@@ -218,6 +218,23 @@ class Song:
             "lastfm_playcount": self.lastfm_playcount,
             "lastfm_tags": self.lastfm_tags,
             "hash": self.hash
+        }
+        
+    def to_simple_dict(self) -> dict:
+        return {
+            "hash": self.hash,
+            "title": self.title,
+            "artists": self.get_artists(),
+            "album": self.album,
+            "track_number": self.track_number,
+            "disc_number": self.disc_number,
+            "duration": self.duration,
+            "release_year": self.release_year,
+            "genres": self.genres,
+            "play_count": self.play_count + self.lastfm_playcount,
+            "lyrics": self.lyrics,
+            "cover_hash": sha256(str(self.cover_art).encode()).hexdigest(),
+            "loudness": self.loudness,
         }
 
     @classmethod

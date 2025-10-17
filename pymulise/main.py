@@ -86,38 +86,6 @@ def require_session(user_service: "UserService", key_name="session_key"):
     return decorator
 
 
-@require_session(user_service)
-@app.post("/get_songs")
-async def get_songs(request: Request, email: str):
-    body = await request.json()
-    filter_params = body.get("filter_params")
-    all_songs, _, _ = await library_service.get_snapshot()
-    if filter_params and type(filter_params) == dict:
-        filter_title = filter_params.get("title", None)
-        filter_artist = filter_params.get("artist", None)
-        filter_album = filter_params.get("album", None)
-        filter_genres = filter_params.get("genre", None)
-        if filter_genres and type(filter_genres) == str:
-            filter_genres = filter_genres.split(",")
-        elif filter_genres and type(filter_genres) == list:
-            filter_genres = [genre.strip() for genre in filter_genres]
-        else:
-            filter_genres = None
-        filter_year = filter_params.get("year", None)
-        filter_play_count = filter_params.get("play_count", None)
-        filter_hash = filter_params.get("hash", None)
-        filtered_songs = [song for song in all_songs if 
-                     (filter_title is None or str(filter_title).lower() in song.title.lower()) and
-                     (filter_artist is None or str(filter_artist).lower() in song.get_artists().lower()) and
-                     (filter_album is None or str(filter_album).lower() in song.album.lower()) and
-                     (filter_genres is None or any(genre.lower() in song.genres for genre in filter_genres)) and
-                     (filter_year is None or int(filter_year) == song.release_year) and
-                     (filter_play_count is None or filter_play_count == song.play_count) and
-                     (filter_hash is None or filter_hash == song.get_hash())]
-        return {"songs": [song.to_dict() for song in filtered_songs]}
-    return {"songs": [song.to_dict() for song in all_songs]}
-
-
 @app.post("/search_songs")
 async def search_songs(request: Request):
     """
@@ -170,7 +138,7 @@ async def search_songs(request: Request):
                 score += 1 / (1 + len(song_set))
 
         if score > 0:
-            song_dict = song.to_dict()
+            song_dict = song.to_simple_dict()
             song_dict["search_score"] = score
             results.append(song_dict)
 
@@ -180,28 +148,12 @@ async def search_songs(request: Request):
 
 
 @require_session(user_service)
-@app.post("/get_artists")
-async def get_artists(request: Request, email: str):
-    body = await request.json()
-    _, _, all_artists = await library_service.get_snapshot()
-    return {"artists": [artist.to_dict() for artist in all_artists]}
-
-
-@require_session(user_service)
-@app.post("/get_albums")
-async def get_albums(request: Request, email: str):
-    body = await request.json()
-    _, all_albums, _ = await library_service.get_snapshot()
-    return {"albums": [album.to_dict() for album in all_albums]}
-
-
-@require_session(user_service)
 @app.post("/get_full_library")
 async def get_library(request: Request, email: str):
     body = await request.json()
 
     all_songs, all_albums, all_artists = await library_service.get_snapshot()
-    return {"songs": [song.to_dict() for song in all_songs],
+    return {"songs": [song.to_simple_dict() for song in all_songs],
             "artists": [artist.to_dict() for artist in all_artists],
             "albums": [album.to_dict() for album in all_albums]}
 
@@ -219,7 +171,7 @@ async def get_song_details(request: Request, email: str):
     all_songs, _, _ = await library_service.get_snapshot()
     for song in all_songs:
         if song.get_hash() == song_hash:
-            return {"song": song.to_dict()}
+            return {"song": song.to_simple_dict()}
     return {}
 
 
