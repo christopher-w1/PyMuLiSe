@@ -224,31 +224,29 @@ async def get_song_details(request: Request, email: str):
 
 
 @require_session(user_service)
-@app.post("/get_cover_art")
-async def get_cover_art(request: Request, size: int | None = Query(None, gt=0, le=1000)):
-    body = await request.json()
-
-    song_hash = body.get("song_hash")
-    if not song_hash:
-        raise HTTPException(status_code=400, detail="Missing song hash")
-    if not await library_service.has_song(song_hash):
-        raise HTTPException(status_code=404, detail="Song not found in library")
-    file_path = library_service.cover_map.get(song_hash)
+@app.get("/get_cover_art")
+async def get_cover_art( cover_hash: str = Query(...),
+    size: int | None = Query(None, gt=0, le=2000) ):
+    file_path = library_service.cover_map.get(cover_hash)
     if not file_path:
         raise HTTPException(status_code=404, detail="Cover art not found")
-    
-    file_hash = sha256(file_path.encode()).hexdigest()
+
+    headers = {
+        "Content-Disposition": f"inline; filename={cover_hash}.jpg",
+        "Cache-Control": "public, max-age=86400"
+    }
+
     if size is None:
-        return FileResponse(file_path, media_type="image/jpeg", filename=f"{file_hash}.jpg")
+        return FileResponse(file_path, media_type="image/jpeg", headers=headers)
 
     img = Image.open(file_path)
     x, y = img.size
     factor = size / max(x, y, size)
-    img.thumbnail((int(factor*x), int(factor*y)))
+    img.thumbnail((int(factor * x), int(factor * y)))
     buf = io.BytesIO()
     img.save(buf, format="JPEG")
     buf.seek(0)
-    return StreamingResponse(buf, media_type="image/jpeg", headers={"Content-Disposition": f"inline; filename={file_hash}.jpg"})
+    return StreamingResponse(buf, media_type="image/jpeg", headers=headers)
 
 
 @require_session(user_service)

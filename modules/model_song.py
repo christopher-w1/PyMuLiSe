@@ -6,6 +6,7 @@ from mutagen.mp4 import MP4, MP4Tags
 from mutagen.oggvorbis import OggVorbis
 from datetime import datetime
 from modules.filesys_utils import find_cover_art, calculate_loudness
+from hashlib import sha256
 
 VARIOUS_ARTISTS = [
     "various artists",
@@ -211,6 +212,7 @@ class Song:
             "format": self.format,
             "file_size": self.file_size,
             "cover_art": self.cover_art,
+            "cover_hash": sha256(str(self.cover_art).encode()).hexdigest(),
             "loudness": self.loudness,
             "peak": self.peak,
             "lastfm_playcount": self.lastfm_playcount,

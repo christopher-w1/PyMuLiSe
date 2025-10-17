@@ -3,6 +3,7 @@ from modules.library_utils import scan_library, song_recommendations, load_libra
 from modules.model_album import Album
 from modules.model_song import Song
 from modules.model_artist import Artist
+from hashlib import sha256
 
 def editing_distance(s1: str, s2: str) -> int:
     if len(s1) < len(s2):
@@ -44,7 +45,8 @@ class LibraryService:
             async with self._lock:
                 self.library_snapshot = snapshot
                 self.song_map = {song.get_hash(): song for song in snapshot[0]}
-                self.cover_map = {song.get_hash(): song.cover_art for song in snapshot[0]}
+                self.cover_map = {sha256(str(song.cover_art).encode()).hexdigest(): 
+                    song.cover_art for song in snapshot[0]}
                 self.album_map = {album.hash: album for album in snapshot[1]}
                 self.artist_map = {artist.name: artist for artist in snapshot[2]}
             await asyncio.sleep(600)
