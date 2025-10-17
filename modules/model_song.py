@@ -27,6 +27,7 @@ class Song:
         self.release_year = 0
         self.genres = []
         self.play_count = 0
+        self.popularity = 0.5
         self.last_played = ""
         self.lyrics = ""
         self.explicit = False
@@ -205,6 +206,7 @@ class Song:
             "release_year": self.release_year,
             "genres": self.genres,
             "play_count": self.play_count,
+            "popularity": self.popularity,
             "last_played": self.last_played,
             "lyrics": self.lyrics,
             "explicit": self.explicit,
@@ -251,6 +253,7 @@ class Song:
         song.release_year = data.get("release_year", 0)
         song.genres = data.get("genres", [])
         song.play_count = data.get("play_count", 0)
+        song.popularity = data.get("popularity", 0.5)
         song.last_played = data.get("last_played", "")
         song.lyrics = data.get("lyrics", "")
         song.explicit = data.get("explicit", False)

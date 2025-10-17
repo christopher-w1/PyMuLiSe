@@ -268,6 +268,8 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
     for artist in tqdm(artist_objects, desc="Processed artists"):
         for album in album_objects:
             for song in album.songs:
+                if song.play_count or song.lastfm_playcount:
+                    song.popularity = (song.play_count + song.lastfm_playcount) / max(1, artist.play_count)
                 if song in artist.songs and album not in artist.albums:
                     artist.albums.append(album)
 
@@ -321,7 +323,9 @@ def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float
     :param number: Maximum number of recommendations.
     :return: List of recommended songs.
     """
-    candidates = [(s, song_similartiy(song, s)) for s in all_songs if s != song and song_similartiy(song, s) >= threshold]
+    candidates = [(s, song_similartiy(song, s)*min(1, s.popularity)) for s in all_songs if s != song 
+                  and song_similartiy(song, s) >= threshold
+                  and s.duration >= 120]
 
     if not candidates:
         return []
@@ -340,7 +344,6 @@ def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float
         probabilities = [sim / total for sim in similarities]
 
     recommendations = random.choices(songs, weights=probabilities, k=number)
-
     recommendations = list(dict.fromkeys(recommendations))
 
     # Wenn weniger als number nach dedup => mit ungewichtetem Zufall auffüllen

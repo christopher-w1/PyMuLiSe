@@ -163,7 +163,7 @@ class Artist:
             self.songs = []
         if not song in self.songs:
             self.songs.append(song)
-        self.play_count += song.play_count
+        self.play_count += (song.play_count + song.lastfm_playcount)
         self.genres = list(set(song.genres) | set(self.genres if self.genres else []))
         self._update_most_common_name()
 

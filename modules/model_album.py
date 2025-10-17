@@ -79,7 +79,7 @@ class Album:
         albumname_count = {}
         play_count = 0
         for song in self.songs:
-            play_count += song.play_count
+            play_count += (song.play_count + song.lastfm_playcount)
             if song.album and str(song.album).lower() != "unknown":
                 albumname_count[song.album] = albumname_count.get(song.album, 0) + 1
         self.play_count = play_count
