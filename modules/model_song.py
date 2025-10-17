@@ -7,6 +7,12 @@ from mutagen.oggvorbis import OggVorbis
 from datetime import datetime
 from modules.filesys_utils import find_cover_art, calculate_loudness
 
+VARIOUS_ARTISTS = [
+    "various artists",
+    "verschiedene interpreten",
+    "verschiedene künstler"
+]
+
 class Song:
     def __init__(self, file_path: str = "", skip_analysis: bool = False):
         self.file_path = file_path
@@ -86,10 +92,8 @@ class Song:
             self.title = _get_tag_entry(tags, "\xa9nam")
             self.album = _get_tag_entry(tags, "\xa9alb")
             self.album_artist = _get_tag_entry(tags, "aART") or _get_tag_entry(tags, "\xa9ART")
-
             artists = _get_tag_list(tags, "\xa9ART")
             self.other_artists = artists if len(artists) > 1 else _get_tag_list(tags, "aART") + artists
-
             self.genres = _get_tag_list(tags, "\xa9gen")
             date = _get_tag_entry(tags, "\xa9day", "0")
             self.release_year = int(date[:4]) if date else 0
@@ -103,8 +107,7 @@ class Song:
             self.title = _get_tag_entry(tags, "title")
             self.album = _get_tag_entry(tags, "album")
             self.album_artist = _get_tag_entry(tags, "albumartist") or _get_tag_entry(tags, "artist")
-            self.other_artists = _get_tag_list(tags, "albumartist") + tags.get("artist", [])
-
+            self.other_artists = tags.get("artist", [_get_tag_list(tags, "albumartist")])
             self.genres = _get_tag_list(tags, "genre")
             date = _get_tag_entry(tags, "date", "0")
             self.release_year = int(date[:4]) if date else 0
@@ -171,14 +174,21 @@ class Song:
         self.last_played = datetime.now().isoformat()
 
     def get_genres(self) -> str:
-        return ", ".join(self.genres) if self.genres else "Unknown"
+        return ", ".join(self.genres) if self.genres else "Unknown Genre"
 
     def get_artists(self) -> str:
-        artists = [self.album_artist] + self.other_artists
-        return ", ".join(artists) if artists else "Unknown"
+        various = False
+        artists = []
+        for artist in [self.album_artist] + self.other_artists:
+            if artist.lower().strip() in VARIOUS_ARTISTS:
+                various = True
+            else:
+                artists.append(artist)
+        return ", ".join(list(set(artists))) if artists else (
+            "Various Artists" if various else "Unknown Artist")
 
     def get_title(self) -> str:
-        return self.title if self.title else "Unknown"
+        return self.title if self.title else "Unknown Title"
 
     def to_dict(self) -> dict:
         return {
@@ -188,6 +198,7 @@ class Song:
             "title": self.title,
             "album_artist": self.album_artist,
             "other_artists": self.other_artists,
+            "artists": self.get_artists(),
             "album": self.album,
             "duration": self.duration,
             "release_year": self.release_year,
