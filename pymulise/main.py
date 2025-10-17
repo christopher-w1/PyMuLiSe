@@ -16,6 +16,7 @@ from modules.user_service import UserService
 from modules.filesys_transcoder import Transcoding
 from contextlib import asynccontextmanager
 from hashlib import sha256
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -23,7 +24,7 @@ DEBUG_SKIP = True
 
 library_service = LibraryService()
 user_service = UserService(registration_key="pymulise")
-playback_module = PlaybackModule()
+sessions = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,6 +52,7 @@ def schedule_cleanup(path: str, delay_sec: int = 600):
         except Exception as e:
             print(f"Cleanup failed: {e}")
     threading.Thread(target=cleanup, daemon=True).start()
+
 
 def require_session(user_service: "UserService", key_name="session_key"):
     """
@@ -148,19 +150,8 @@ async def search_songs(request: Request):
 
 
 @require_session(user_service)
-@app.post("/get_full_library")
-async def get_library(request: Request, email: str):
-    body = await request.json()
-
-    all_songs, all_albums, all_artists = await library_service.get_snapshot()
-    return {"songs": [song.to_simple_dict() for song in all_songs],
-            "artists": [artist.to_dict() for artist in all_artists],
-            "albums": [album.to_dict() for album in all_albums]}
-
-
-@require_session(user_service)
 @app.post("/get_song_details")
-async def get_song_details(request: Request, email: str):
+async def get_song_details(request: Request):
     body = await request.json()
 
     song_hash = body.get("song_hash")
@@ -200,94 +191,6 @@ async def get_cover_art( cover_hash: str = Query(...),
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/jpeg", headers=headers)
 
-
-@require_session(user_service)
-@app.post("/get_song_file")
-async def get_song_file(request: Request, background_tasks: BackgroundTasks):
-    body = await request.json()
-
-    song_hash = body.get("song_hash")
-    if not song_hash:
-        raise HTTPException(status_code=400, detail="Missing song hash")
-
-    transcode = body.get("transcode", False)
-    format_override = body.get("format", "mp3")
-    bitrate = body.get("bitrate", 192)
-    target_lufs = float(body.get("target_lufs", 0))
-
-    song = await library_service.get_song(song_hash)
-    if not song:
-        raise HTTPException(status_code=404, detail="Song not found")
-
-    file_path = song.file_path
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Original file not found")
-
-    if transcode:
-        try:
-            transcoder = Transcoding(
-                song_hash=song_hash,
-                src_file=file_path,
-                target_format=format_override,
-                target_bitrate=bitrate,
-                cache_dir="./transcode_cache",
-                volume_change=min(song.peak or 0, target_lufs - (song.loudness or -7)) if target_lufs else 0
-            )
-            output_file = transcoder.run()
-            mime_type = f"audio/{format_override}"
-
-            # Clean up in 10 minutes
-            schedule_cleanup(output_file, delay_sec=600)
-
-            return FileResponse(
-                path=output_file,
-                media_type=mime_type,
-                filename=os.path.basename(output_file)
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Transcoding error: {str(e)}")
-
-    # Fallback to original file
-    mime_type, _ = mimetypes.guess_type(file_path)
-    mime_type = mime_type or "application/octet-stream"
-    return FileResponse(
-        path=file_path,
-        media_type=mime_type,
-        filename=os.path.basename(file_path)
-    )
-
-
-@require_session(user_service)
-@app.post("/get_song_file_from_metadata")
-async def get_song_file_from_metadata(request: Request, email: str):
-    body = await request.json()
-
-    metadata = body.get("metadata")
-    if not metadata:
-        raise HTTPException(status_code=400, detail="Missing metadata")
-    
-    if not isinstance(metadata, dict):
-        raise HTTPException(status_code=400, detail="Metadata must be a dictionary")
-
-    song = await library_service.get_song_by_metadata(metadata)
-    if not song:
-        raise HTTPException(status_code=404, detail="Song not found in library")
-
-    file_path = song.file_path
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Song file not found")
-
-    # Try to guess mime type
-    mime_type, _ = mimetypes.guess_type(file_path)
-    if mime_type is None:
-        mime_type = "application/octet-stream"
-    
-    return FileResponse(
-        path=file_path,
-        media_type=mime_type,
-        filename=os.path.basename(file_path)
-    )
-    
 
 @require_session(user_service)
 @app.get("/stream/{song_hash}")
@@ -344,40 +247,6 @@ async def stream_song(song_hash: str, request: Request, email: Optional[str] = N
 
     status_code = 206 if range_header else 200
     return StreamingResponse(iterfile(), headers=headers, status_code=status_code)
-
-
-@app.websocket("/ws/playback/owner={owner_id}?song={song_id}")
-async def playback_ws(websocket: WebSocket, owner_id: str, song_id: str | None, session_key: str = Query(...)):
-    """
-    WebSocket endpoint for playback module.
-    Query parameters:
-    - owner_id: ID (email) of the channel owner (creator)
-    - playlist: List of song hashes to play
-    - session_key: Session key of the connecting user
-    """
-    # Get user email from session key, reject if invalid
-    user = await user_service.get_user_by_session(session_key)
-    if not user:
-        await websocket.close(code=4401)
-        return
-
-    # Check if channel exists, create if owner
-    channel = await playback_module.get_channel(owner_id)
-    if not channel:
-        if session_key == owner_id and song_id:
-            channel = await playback_module.create_channel(owner_id, [song_id])
-        else:
-            await websocket.close(code=4404)
-            return
-
-    await channel.join(user["email"], websocket)
-
-    try:
-        while True:
-            data = await websocket.receive_json()
-            await channel.handle_message(user["email"], data)
-    except:
-        await channel.leave(session_key)
         
         
 @app.post("/register")
@@ -420,6 +289,44 @@ async def login(request: Request):
                 "email": data.get("email")}
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+        
+        
+@app.get("/ping")
+async def ping():
+    return {"status": "ok"}
+
+
+@require_session(user_service)
+@app.post("/session/update/{session_id}")
+async def update_session(session_id: str, request: Request):
+    data = await request.json()
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing session data")
+
+    session = sessions.get(session_id, {})
+    guest_commands = session.get("guest_commands", [])
+
+    sessions[session_id] = {
+        "host_ping": data.get("host_ping"),
+        "current_song": data.get("current_song"),
+        "playlist": data.get("playlist"),
+        "playback_timestamp": data.get("playback_timestamp"),
+        "guest_commands": [],
+        "last_update": datetime.utcnow()
+    }
+
+    return {
+        "status": "ok",
+        "guest_commands": guest_commands
+    }
+
+
+@app.get("/session/get/{session_id}")
+async def get_session(session_id: str):
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
         
         
 def main():
