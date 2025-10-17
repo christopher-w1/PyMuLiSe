@@ -19,6 +19,7 @@ from hashlib import sha256
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
+DEBUG_SKIP = True
 
 library_service = LibraryService()
 user_service = UserService(registration_key="pymulise")
@@ -59,6 +60,10 @@ def require_session(user_service: "UserService", key_name="session_key"):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, request: Request, **kwargs):
+            if DEBUG_SKIP:
+                kwargs["email"] = "debug@example.com"
+                kwargs["username"] = "DebugUser"
+                return await func(*args, request=request, **kwargs)
             # Session-Key zuerst aus JSON Body, dann Query
             try:
                 data = await request.json()
@@ -113,14 +118,30 @@ async def get_songs(request: Request, email: str):
     return {"songs": [song.to_dict() for song in all_songs]}
 
 
-@require_session(user_service)
 @app.post("/search_songs")
-async def search_songs(request: Request, email: str):
+async def search_songs(request: Request):
+    """
+    Receives a query string.
+    
+    Returns a list of song dictionaries.
+    Each song dict has:
+    hash: str
+    title: str
+    album: str
+    track_number: int
+    album_artist: str
+    other_artists: str
+    genres: list[str]
+    loudness: float
+    duration: int
+    """
     body = await request.json()
 
     query = body.get("query", "").strip()
     if not query:
         raise HTTPException(status_code=400, detail="Query is required")
+    
+    result_length = body.get("result_limit", 20)
 
     if len(query) < 3:
         return {"songs": []}
@@ -134,13 +155,19 @@ async def search_songs(request: Request, email: str):
     for song in all_songs:
         query_set = set(query.lower().split())
         song_set = set(song.title.lower().split()) | set(song.get_artists().lower().split()) | set(song.album.lower().split())
+        title_set = set(song.title.lower().split())
+        artist_set = set(song.get_artists().lower().split())
 
         score = 0
         for word in query_set:
-            if word in song_set:
-                score += 2
+            if word in title_set:
+                score += 4 / (1 + len(title_set))
+            elif word in artist_set:
+                score += 3 / (1 + len(artist_set))
+            elif word in song_set:
+                score += 2 / (1 + len(song_set))
             elif any(word in s for s in song_set):
-                score += 1
+                score += 1 / (1 + len(song_set))
 
         if score > 0:
             song_dict = song.to_dict()
@@ -149,7 +176,7 @@ async def search_songs(request: Request, email: str):
 
     # Sort descending
     results.sort(key=lambda x: x["search_score"], reverse=True)
-    return results[:20]
+    return results[:result_length]
 
 
 @require_session(user_service)
