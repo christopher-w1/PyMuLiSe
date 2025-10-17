@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import random
 from tqdm import tqdm
 from typing import List, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -306,22 +307,45 @@ def song_similartiy(song1: Song, song2: Song) -> float:
     similarity += _jaccard(song1.genres, song2.genres) * 0.5
     similarity += _jaccard(song1.lastfm_tags, song2.lastfm_tags) * 0.25
     similarity += _jaccard(song1.other_artists + [song1.album_artist], song2.other_artists + [song2.album_artist]) * 0.25
-    similarity +=  0.25 * (song1.album == song2.album)
+    similarity +=  0.5 * (song1.album == song2.album)
     
     return min(1, similarity)
 
-def song_recommendations(song: Song, all_songs: list[Song], threshold: float = 0.5, number: int = 10) -> list[Song]:
+def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float = 0.5, number: int = 10) -> list["Song"]:
     """
-    Get song recommendations based on the similarity of the given song to other songs in the library.
+    Get song recommendations based on similarity, with weighted random selection.
+    Higher similarity => higher chance of being picked.
     :param song: The song to find recommendations for.
     :param all_songs: List of all songs in the library.
     :param threshold: Similarity threshold for recommendations.
+    :param number: Maximum number of recommendations.
     :return: List of recommended songs.
     """
-    recommendations = []
-    for other_song in all_songs:
-        if song != other_song and song_similartiy(song, other_song) >= threshold:
-            recommendations.append(other_song)
-            if len(recommendations) >= number:
-                break
+    candidates = [(s, song_similartiy(song, s)) for s in all_songs if s != song and song_similartiy(song, s) >= threshold]
+
+    if not candidates:
+        return []
+
+    if len(candidates) <= number:
+        songs = [s for s, sim in candidates]
+        random.shuffle(songs)
+        return songs
+
+    # Weighted random selection
+    songs, similarities = zip(*candidates)
+    total = sum(similarities)
+    if total == 0:
+        probabilities = [1 / len(songs)] * len(songs)
+    else:
+        probabilities = [sim / total for sim in similarities]
+
+    recommendations = random.choices(songs, weights=probabilities, k=number)
+
+    recommendations = list(dict.fromkeys(recommendations))
+
+    # Wenn weniger als number nach dedup => mit ungewichtetem Zufall auffüllen
+    while len(recommendations) < number and len(recommendations) < len(songs):
+        remaining = [s for s in songs if s not in recommendations]
+        recommendations.append(random.choice(remaining))
+
     return recommendations

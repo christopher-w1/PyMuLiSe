@@ -330,13 +330,14 @@ async def get_session(session_id: str):
     return session
         
         
-@app.get("/recommendations/{song_hash}?n={number}")
-async def get_song_recommendations(song_hash: str, n: str):
+@app.get("/recommendations/{song_hash}")
+async def get_song_recommendations(song_hash: str):
     song = await library_service.get_song(song_hash)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
     all_songs, _, _ = await library_service.get_snapshot()
-    recommendations = song_recommendations(song, all_songs, 0.5, int(n))
+    recommendations = [song.to_simple_dict() for 
+                       song in song_recommendations(song, all_songs, 0.5, 10)]
     return {
         "status": "ok",
         "recommendations": recommendations
