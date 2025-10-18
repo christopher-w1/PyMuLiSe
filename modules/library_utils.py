@@ -289,31 +289,34 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
     print(f"✓ Library updated successfully with {len(new_songs)} new songs.")
     return updated_songs, album_objects, artist_objects
 
-def _jaccard(xs: list, ys: list) -> float:
+def _jaccard_index(xs: list, ys: list) -> float:
     if not xs or not ys:
         return 0
     return (len(set(xs) & set(ys)) / max(1, len(set(xs) | set(ys))))
 
-def song_similartiy(song1: Song, song2: Song) -> float:
+def calc_song_similarity(song1: Song, song2: Song) -> float:
     """
     Calculate the similarity between two songs based on their file names.
     :param song1: Path to the first song.
     :param song2: Path to the second song.
     :return: Similarity score between 0 and 1.
     """
-    similarity = 0.0
-    
-    if song1.file_path == song2.file_path:
+    if (song1.file_path == song2.file_path or
+        (song1.album == song2.album and 
+        song1.album_artist == song2.album_artist)):
         return 1.0
     
-    similarity += _jaccard(song1.genres, song2.genres) * 0.5
-    similarity += _jaccard(song1.lastfm_tags, song2.lastfm_tags) * 0.25
-    similarity += _jaccard(song1.other_artists + [song1.album_artist], song2.other_artists + [song2.album_artist]) * 0.25
-    similarity +=  0.5 * (song1.album == song2.album)
+    genre_score     = _jaccard_index(song1.genres, song2.genres)
+    tag_score       = _jaccard_index(song1.lastfm_tags, song2.lastfm_tags)
+    artist_score    = _jaccard_index(song1.other_artists + [song1.album_artist], 
+                                     song2.other_artists + [song2.album_artist])
+    date_score      = 1 / (max((song1.release_year - song2.release_year)*0.2, 
+                               (song2.release_year - song1.release_year)*0.2, 1))
     
-    return min(1, similarity)
+    return min(1, max(genre_score, tag_score, artist_score)*date_score)
 
-def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float = 0.5, number: int = 10) -> list["Song"]:
+def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float = 0.5, 
+                         number: int = 10) -> list["Song"]:
     """
     Get song recommendations based on similarity, with weighted random selection.
     Higher similarity => higher chance of being picked.
@@ -323,9 +326,14 @@ def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float
     :param number: Maximum number of recommendations.
     :return: List of recommended songs.
     """
-    candidates = [(s, song_similartiy(song, s)*min(1, s.popularity)) for s in all_songs if s != song 
-                  and song_similartiy(song, s) >= threshold
-                  and s.duration >= 120]
+    candidates = [(s, calc_song_similarity(song, s)*min(1, s.popularity)) 
+                  for s in all_songs if s != song and s.duration >= 120]
+    
+    max_similarity = max([similarity for s, similarity in candidates if 
+                          s.album_artist != song.album_artist])
+    
+    if max_similarity:
+        candidates = [(s, min(1, similarity/max_similarity)) for s, similarity in candidates]
 
     if not candidates:
         return []
