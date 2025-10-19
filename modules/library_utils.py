@@ -343,7 +343,6 @@ def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float
         random.shuffle(songs)
         return songs
 
-    # Weighted random selection
     songs, similarities = zip(*candidates)
     total = sum(similarities)
     if total == 0:
@@ -354,7 +353,38 @@ def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float
     recommendations = random.choices(songs, weights=probabilities, k=number)
     recommendations = list(dict.fromkeys(recommendations))
 
-    # Wenn weniger als number nach dedup => mit ungewichtetem Zufall auffüllen
+    while len(recommendations) < number and len(recommendations) < len(songs):
+        remaining = [s for s in songs if s not in recommendations]
+        recommendations.append(random.choice(remaining))
+
+    return recommendations
+
+def song_recommendations_genre(genre: str, all_songs: list["Song"], threshold: float = 0.5, 
+                         number: int = 10) -> list["Song"]:
+    """
+    Get song recommendations based on similarity, with weighted random selection.
+    Higher similarity => higher chance of being picked.
+    :param song: The song to find recommendations for.
+    :param all_songs: List of all songs in the library.
+    :param threshold: Similarity threshold for recommendations.
+    :param number: Maximum number of recommendations.
+    :return: List of recommended songs.
+    """
+    candidates = [(s, s.popularity) 
+                  for s in all_songs if genre in s.genres and s.duration >= 120 and s.popularity > threshold]
+    
+    songs, probabilities = zip(*candidates)
+    
+    songs, similarities = zip(*candidates)
+    total = sum(similarities)
+    if total == 0:
+        probabilities = [1 / len(songs)] * len(songs)
+    else:
+        probabilities = [sim / total for sim in similarities]
+        
+    recommendations = random.choices(songs, weights=probabilities, k=number)
+    recommendations = list(dict.fromkeys(recommendations))
+
     while len(recommendations) < number and len(recommendations) < len(songs):
         remaining = [s for s in songs if s not in recommendations]
         recommendations.append(random.choice(remaining))

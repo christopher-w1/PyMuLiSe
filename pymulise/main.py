@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi import Query, WebSocket
 from PIL import Image
-from modules.library_utils import song_recommendations
+from modules.library_utils import song_recommendations, song_recommendations_genre
 from modules.playback_module import PlaybackChannel, PlaybackModule
 from modules.library_service import LibraryService
 from modules.user_service import UserService
@@ -338,6 +338,17 @@ async def get_song_recommendations(song_hash: str):
     all_songs, _, _ = await library_service.get_snapshot()
     recommendations = [song.to_simple_dict() for 
                        song in song_recommendations(song, all_songs, 0.5, 10)]
+    return {
+        "status": "ok",
+        "recommendations": recommendations
+    }  
+   
+    
+@app.get("/songs-from-genre/{genre}")
+async def get_song_recommendations2(genre: str):
+    all_songs, _, _ = await library_service.get_snapshot()
+    recommendations = [song.to_simple_dict() for 
+                       song in song_recommendations_genre(genre, all_songs, 0.5, 10)]
     return {
         "status": "ok",
         "recommendations": recommendations
