@@ -1,5 +1,5 @@
 import asyncio
-from modules.library_utils import scan_library, song_recommendations, load_library
+from modules.library_utils import scan_library
 from modules.model_album import Album
 from modules.model_song import Song
 from modules.model_artist import Artist

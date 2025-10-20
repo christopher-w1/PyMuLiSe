@@ -40,6 +40,7 @@ class Song:
         self.lastfm_playcount = 0
         self.lastfm_tags = []
         self.hash = ""
+        self.additional_data = {}
 
         if not file_path:
             return
@@ -219,7 +220,8 @@ class Song:
             "peak": self.peak,
             "lastfm_playcount": self.lastfm_playcount,
             "lastfm_tags": self.lastfm_tags,
-            "hash": self.hash
+            "hash": self.hash,
+            "additional_data": self.additional_data
         }
         
     def to_simple_dict(self) -> dict:
@@ -266,6 +268,7 @@ class Song:
         song.lastfm_playcount = data.get("lastfm_playcount", 0)
         song.lastfm_tags = data.get("lastfm_tags", [])
         song.hash = data.get("hash", "")
+        song.additional_data = data.get("additional_data", {})
         song._fix_genres()
         return song
 

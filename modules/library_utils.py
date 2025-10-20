@@ -11,6 +11,9 @@ from modules.model_song import Song
 from modules.model_album import Album
 from modules.model_artist import Artist
 from modules.filesys_utils import find_song_paths
+from modules.wikicrawler import get_band_genres
+
+VARIOUS_TERMS = ["various artists", "verschiedene interpreten", "verschiedene künstler", "various"]
 
 def fetch_lastfm_data_minimal(args: Tuple[str, str, str, str]) -> Tuple[str, int, List[str]]:
     song_id, artist, title, api_key = args
@@ -46,7 +49,7 @@ def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: f
 
     for song in songs:
         song_id = str(song.file_path)
-        artists = [a for a in song.other_artists + [song.album_artist] if a != "Various Artists"] or ["Various Artists"]
+        artists = [a for a in song.other_artists + [song.album_artist] if a not in VARIOUS_TERMS] or ["Various Artists"]
         title = song.title
 
         if artists and title:
@@ -221,10 +224,34 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
         print(f"Updating Last.fm data for {len(song_without_lastfm)} songs...")
         update_lastfm_serial_with_throttling(song_without_lastfm)
         was_updated = True
+    failed = [f"{s.get_artists()} - {s.title}" for s in updated_songs if not s.lastfm_playcount]
+    if failed: print(f"Update failed for {len(failed)} songs:\n{', '.join(failed)}")
         
-    if not was_updated:
+    songs_without_wiki = [s for s in updated_songs if not s.additional_data.get("wiki_update", False)]
+        
+    if not was_updated and not songs_without_wiki:
         print("Library is up to date. No changes detected.")
         return existing_songs, existing_albums, existing_artists
+    
+    if songs_without_wiki:
+        artist_genre_map = {}
+        for song in songs_without_wiki:
+            for a in ([song.album_artist] + song.other_artists):
+                if a.lower() in VARIOUS_TERMS: continue
+                artist_name = Artist.get_simple_name(a)
+                artist_genre_map[artist_name] = []
+        print(f"Updating genre tags for {len(songs_without_wiki)} songs...")
+        for artist_name in tqdm(artist_genre_map.keys(), desc="Processed artists"):
+            artist_genre_map[artist_name] = get_band_genres(artist_name)
+        for song in tqdm(songs_without_wiki, desc="Processed songs"):
+            song_genres = set()
+            for a in ([song.album_artist] + song.other_artists):
+                if a.lower() in VARIOUS_TERMS: continue
+                artist_name = Artist.get_simple_name(a)
+                song_genres = song_genres.union(set(artist_genre_map.get(artist_name, [])))
+            if song_genres:
+                song.genres = list(song_genres)
+            song.additional_data['wiki_update'] = True
                 
     # Map songs to albums
     album_paths = list(set(os.path.dirname(path) for path in song_paths))
@@ -359,34 +386,38 @@ def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float
 
     return recommendations
 
-def song_recommendations_genre(genre: str, all_songs: list["Song"], threshold: float = 0.5, 
-                         number: int = 10) -> list["Song"]:
-    """
-    Get song recommendations based on similarity, with weighted random selection.
-    Higher similarity => higher chance of being picked.
-    :param song: The song to find recommendations for.
-    :param all_songs: List of all songs in the library.
-    :param threshold: Similarity threshold for recommendations.
-    :param number: Maximum number of recommendations.
-    :return: List of recommended songs.
-    """
-    candidates = [(s, s.popularity) 
-                  for s in all_songs if genre in s.genres and s.duration >= 120 and s.popularity > threshold]
-    
-    songs, probabilities = zip(*candidates)
-    
-    songs, similarities = zip(*candidates)
-    total = sum(similarities)
-    if total == 0:
-        probabilities = [1 / len(songs)] * len(songs)
+import random
+
+def song_recommendations_genre(genre: str,
+                               all_songs: list["Song"],
+                               threshold: float = 0.5,
+                               number: int = 10) -> list["Song"]:
+    g = genre.lower()
+    candidates = [(s, s.popularity)
+                  for s in all_songs
+                  if any(g == gg.lower() for gg in getattr(s, "genres", []) + getattr(s, "lastfm_tags", []))
+                  and getattr(s, "duration", 0) >= 120
+                  and getattr(s, "popularity", 0) > threshold]
+
+    if not candidates:
+        return []
+
+    songs, probs = zip(*candidates)
+    probs = list(probs)
+
+    total = sum(probs)
+    if total <= 0:
+        weights = [1.0] * len(songs)
     else:
-        probabilities = [sim / total for sim in similarities]
-        
-    recommendations = random.choices(songs, weights=probabilities, k=number)
-    recommendations = list(dict.fromkeys(recommendations))
+        weights = [p / total for p in probs] 
 
-    while len(recommendations) < number and len(recommendations) < len(songs):
+    picks = random.choices(songs, weights=weights, k=number)
+
+    recommendations = list(dict.fromkeys(picks))
+
+    if len(recommendations) < number:
         remaining = [s for s in songs if s not in recommendations]
-        recommendations.append(random.choice(remaining))
+        random.shuffle(remaining)
+        recommendations.extend(remaining[:number - len(recommendations)])
 
-    return recommendations
+    return recommendations[:number]
