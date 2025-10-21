@@ -52,7 +52,7 @@ class SceneMapper:
         current_date = int(date.today().strftime("%Y"))
         for s in songs:
             if any(re.search(POP_PATTERNS, g) for g in s.genres):
-                if s.release_year >= current_date - 30:
+                if s.release_year >= current_date - 30 or not s.release_year:
                     scene_to_songs["pop"].append(s)
                 else:
                     scene_to_songs["oldies"].append(s)
