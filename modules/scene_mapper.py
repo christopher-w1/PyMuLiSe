@@ -1,6 +1,7 @@
 import re, random
 from collections import defaultdict
 
+from modules.general_utils import _jaccard_index
 from modules.model_song import Song
 
 BASE_GENRE_PATTERNS = {
@@ -61,7 +62,8 @@ def sample_songs_by_scene(songs: list[Song], n: int) -> dict[str, list[Song]]:
         result[scene] = []
 
         for _ in range(min(n, len(unique_group))):
-            weights = [max(s.popularity, 0.01) for s in unique_group]
+            weights = [max(s.popularity*(_jaccard_index(s.genres, result[scene][-1]) 
+                                         if result[scene] else 1), 0.01) for s in unique_group]
             sampled = random.choices(unique_group, weights=weights, k=1)[0]
             result[scene].append(sampled)
             unique_group.remove(sampled)

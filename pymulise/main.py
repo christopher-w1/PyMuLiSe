@@ -358,7 +358,6 @@ async def get_song_recommendations2(genre: str):
     
 @app.get("/recommendations-by-scene/{n}")
 async def get_song_recommendations3(n: str):
-    print(f"Requested: {n} recommendations")
     all_songs, _, _ = await library_service.get_snapshot()
     scene_dict = sample_songs_by_scene(all_songs, int(n))
     return {
