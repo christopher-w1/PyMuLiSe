@@ -5,6 +5,7 @@ import random
 from tqdm import tqdm
 from typing import List, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from modules.general_utils import _jaccard_index
 from modules.lastfm_client import LastFMClient
 from modules.filesys_utils import calculate_loudness
 from modules.model_song import Song
@@ -315,11 +316,6 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
 
     print(f"✓ Library updated successfully with {len(new_songs)} new songs.")
     return updated_songs, album_objects, artist_objects
-
-def _jaccard_index(xs: list, ys: list) -> float:
-    if not xs or not ys:
-        return 0
-    return (len(set(xs) & set(ys)) / max(1, len(set(xs) | set(ys))))
 
 def calc_song_similarity(song1: Song, song2: Song) -> float:
     """
