@@ -342,8 +342,8 @@ def calc_song_similarity(song1: Song, song2: Song) -> float:
     
     return min(1, max(genre_score, tag_score, artist_score)*date_score)
 
-def song_recommendations(song: "Song", all_songs: list["Song"], seed: Song | None = None, 
-                         threshold: float = 0.1, number: int = 10) -> list["Song"]:
+def song_recommendations(song: "Song", all_songs: list["Song"], seed: Song|None = None, 
+                         threshold: float = 0.1, number: int = 10, scene: str|None = None) -> list["Song"]:
     """
     Get song recommendations based on similarity, with weighted random selection.
     Higher similarity => higher chance of being picked.
@@ -353,9 +353,10 @@ def song_recommendations(song: "Song", all_songs: list["Song"], seed: Song | Non
     :param number: Maximum number of recommendations.
     :return: List of recommended songs.
     """
-    candidates = [(s, calc_song_similarity(song, s)*min(1, s.popularity)) 
+    candidates = [(s, calc_song_similarity(song, s)*min(1, s.popularity)*(
+                   (calc_song_similarity(seed, s) if seed else 1)))
                   for s in all_songs if s != song and s.duration >= 120
-                  and (not seed or map_genre(seed.genres) == map_genre(s.genres))]
+                  if not scene or scene == map_genre(s.genres)] 
     
     max_similarity = max([similarity for s, similarity in candidates if 
                           s.album_artist != song.album_artist])
