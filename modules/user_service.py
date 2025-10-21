@@ -5,7 +5,8 @@ class UserService:
         self.users_file = users_file
         self.registration_key = registration_key
         self.lock = asyncio.Lock()
-        self.sessions = {}
+        self.sessions_data = {} # key -> data
+        self.session_ids = {}   # id  -> key
         self.users = {}
         self._load_users()
 
@@ -54,7 +55,7 @@ class UserService:
         if success:
             await self._save_users()
 
-    async def login(self, email, password) -> tuple[str, str]:
+    async def login(self, email, password) -> tuple[str, str, str]:
         user = self.users.get(email)
         if not user:
             raise ValueError("Invalid credentials")
@@ -64,28 +65,30 @@ class UserService:
             raise ValueError("Invalid credentials")
 
         session_key = uuid.uuid4().hex
-        self.sessions[session_key] = {"email": email, "created": time.time(), "last_active": time.time()}
-        return user["username"], session_key
+        session_id = uuid.uuid4().hex
+        self.sessions_data[session_key] = {"email": email, "created": time.time(), "last_active": time.time()}
+        self.session_ids[session_id] = session_key
+        return user["username"], session_key, session_id
 
     async def logout(self, session_key) -> None:
         async with self.lock:
-            self.sessions.pop(session_key, None)
+            self.sessions_data.pop(session_key, None)
         
     async def refresh_session(self, session_key) -> None:
         async with self.lock:
-            session = self.sessions.get(session_key)
+            session = self.sessions_data.get(session_key)
             if session:
                 session["last_active"] = time.time()
             
     async def validate_session(self, session_key) -> bool:
         async with self.lock:
-            if session_key in self.sessions:
-                self.sessions[session_key]["last_active"] = time.time()
+            if session_key in self.sessions_data:
+                self.sessions_data[session_key]["last_active"] = time.time()
                 return True
         return False
 
     async def get_user_by_session(self, session_key) -> dict | None:
-        session = self.sessions.get(session_key)
+        session = self.sessions_data.get(session_key)
         if not session:
             return None
         return self.users.get(session["email"])

@@ -1,22 +1,19 @@
 from functools import wraps
-import os, mimetypes, io
+import os, io
 from pathlib import Path
 from typing import Optional
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import BackgroundTasks
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi import Query, WebSocket
 from PIL import Image
 from modules.library_utils import song_recommendations, song_recommendations_genre
-from modules.playback_module import PlaybackChannel, PlaybackModule
 from modules.library_service import LibraryService
 from modules.user_service import UserService
 from modules.scene_mapper import SceneMapper
 from contextlib import asynccontextmanager
-from hashlib import sha256
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -262,7 +259,7 @@ async def register(request: Request):
             data.get("password"),
             data.get("lastfm_user"),
         )
-        username, session_key = await user_service.login(
+        username, session_key, session_id = await user_service.login(
             data.get("email"),
             data.get("password")
         )
@@ -271,6 +268,7 @@ async def register(request: Request):
         return {"status": "ok",
                 "username": username, 
                 "session_key": session_key,
+                "session_id": session_id,
                 "email": data.get("email")}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -280,7 +278,7 @@ async def register(request: Request):
 async def login(request: Request):
     data = await request.json()
     try:
-        username, session_key = await user_service.login(
+        username, session_key, session_id = await user_service.login(
             data.get("email"),
             data.get("password")
         )
@@ -288,6 +286,7 @@ async def login(request: Request):
         return {"status": "ok",
                 "username": username, 
                 "session_key": session_key,
+                "session_id": session_id,
                 "email": data.get("email")}
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
