@@ -12,7 +12,6 @@ from modules.model_song import Song
 from modules.model_album import Album
 from modules.model_artist import Artist
 from modules.filesys_utils import find_song_paths
-from modules.scene_mapper import map_genre
 from modules.wikicrawler import get_band_genres
 
 VARIOUS_TERMS = ["various artists", "verschiedene interpreten", "verschiedene künstler", "various"]
@@ -338,51 +337,77 @@ def calc_song_similarity(song1: Song, song2: Song) -> float:
     
     return min(1, max(genre_score, tag_score, artist_score)*date_score)
 
-def song_recommendations(song: "Song", all_songs: list["Song"], seed: Song|None = None, 
-                         threshold: float = 0.1, number: int = 10, scene: str|None = None) -> list["Song"]:
+def song_recommendations(
+    song: Song,
+    all_songs: list[Song],
+    seed: Song | None = None,
+    threshold: float = 0.1,
+    number: int = 10,
+    scene: str | None = None,
+    previous_hashes: list[str] = []) -> list[Song]:
     """
-    Get song recommendations based on similarity, with weighted random selection.
-    Higher similarity => higher chance of being picked.
-    :param song: The song to find recommendations for.
-    :param all_songs: List of all songs in the library.
-    :param threshold: Similarity threshold for recommendations.
-    :param number: Maximum number of recommendations.
-    :return: List of recommended songs.
+    Get weighted random recommendations for a song, considering artist diversity
+    and recent playback history.
+
+    - Candidate weight ~ similarity * popularity * seed-similarity (if any)
+    - Weight divided by (1 + number of same-artist songs in current playlist)
+    - Avoid repeats within last 20 songs unless no other options exist
     """
-    candidates = [(s, calc_song_similarity(song, s)*min(1, s.popularity)*(
-                   (calc_song_similarity(seed, s) if seed else 1)))
-                  for s in all_songs if s != song and s.duration >= 120
-                  if not scene or scene == map_genre(s.genres)] 
-    
-    max_similarity = max([similarity for s, similarity in candidates if 
-                          s.album_artist != song.album_artist])
-    
-    if max_similarity:
-        candidates = [(s, min(1, similarity/max_similarity)) for s, similarity in candidates]
+    previous_songs = [s for s in all_songs if s.hash in previous_hashes]
+
+    # Candidate selection
+    candidates = []
+    for s in all_songs:
+        if s == song or s.duration < 120:
+            continue
+
+        base_sim = calc_song_similarity(song, s)
+        if base_sim < threshold:
+            continue
+
+        seed_sim = max(0.01, calc_song_similarity(seed, s)) if seed else 1.0
+        popularity = max(0.01, min(1.0, s.popularity))
+        similarity = base_sim * popularity * seed_sim
+        candidates.append((s, similarity))
 
     if not candidates:
         return []
 
-    if len(candidates) <= number:
-        songs = [s for s, sim in candidates]
-        random.shuffle(songs)
-        return songs
+    # Normalize similarity
+    max_sim = max(sim for s, sim in candidates if s.album_artist != song.album_artist)
+    if max_sim > 0:
+        candidates = [(s, sim / max_sim) for s, sim in candidates]
 
-    songs, similarities = zip(*candidates)
-    total = sum(similarities)
-    if total == 0:
-        probabilities = [1 / len(songs)] * len(songs)
-    else:
-        probabilities = [sim / total for sim in similarities]
+    # Adjust by artist frequency
+    def artist_penalty(song_obj: Song):
+        count = len([x for x in previous_songs[:10] if x.album_artist == song_obj.album_artist])
+        return 1 / max(1, count)
 
-    recommendations = random.choices(songs, weights=probabilities, k=number)
-    recommendations = list(dict.fromkeys(recommendations))
+    weighted_candidates = [(s, sim * artist_penalty(s)) for s, sim in candidates]
 
-    while len(recommendations) < number and len(recommendations) < len(songs):
-        remaining = [s for s in songs if s not in recommendations]
-        recommendations.append(random.choice(remaining))
+    # Split between "fresh" and "recently played" songs
+    fresh_candidates = [(s, w) for s, w in weighted_candidates if s.hash not in previous_hashes]
+    stale_candidates = [(s, w) for s, w in weighted_candidates if s.hash in previous_hashes]
 
-    return recommendations
+    chosen = []
+
+    # Prefer fresh songs first
+    source = fresh_candidates if fresh_candidates else weighted_candidates
+
+    while len(chosen) < number and source:
+        songs, weights = zip(*source)
+        pick = random.choices(songs, weights=weights, k=1)[0]
+        chosen.append(pick)
+        # remove picked song from pool
+        source = [(s, w) for s, w in source if s != pick]
+
+        # Wenn fresh leer und wir noch Lücken haben → aus stale auffüllen
+        if not source and len(chosen) < number and stale_candidates:
+            source = stale_candidates
+            stale_candidates = []
+
+    return chosen[:number]
+
 
 import random
 
