@@ -10,6 +10,7 @@ BASE_GENRE_PATTERNS = {
     r"metal|grind|doom|sludge|thrash|black|death|heavy|viking|metalcore|post hardcore": "metal",
     r"hip[- ]?hop|rap|trap|grime": "rap",
     r"synthwave|dark wave|new wave|synthpop|darkwave|synth rock|post punk|goth|gothic": "gothic",
+    r"medieval|mittelalter|folk rock|medieval rock|pagan": "medieval",
     r"rock|punk|grunge|garage|emo|indie rock|psychedelia|alternative": "rock",
     r"industrial|ebm|neue deutsche härte|shock rock|gothic rock|aggrotech": "industrial",
     r"techno|house|trance|idm|edm|dnb|d b|drum and bass|dubstep": "electronic",
