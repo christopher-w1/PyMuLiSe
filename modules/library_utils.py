@@ -11,6 +11,7 @@ from modules.model_song import Song
 from modules.model_album import Album
 from modules.model_artist import Artist
 from modules.filesys_utils import find_song_paths
+from modules.scene_mapper import map_genre
 from modules.wikicrawler import get_band_genres
 
 VARIOUS_TERMS = ["various artists", "verschiedene interpreten", "verschiedene künstler", "various"]
@@ -62,14 +63,15 @@ def update_lastfm_serial_with_throttling(songs: List[Song], delay_per_request: f
         for artist in artists:
             start_time = time.time()
             _, playcount, tags = fetch_lastfm_data_minimal((song_id, artist, title, api_key))
-            if playcount or tags:
-                song = id_map.get(song_id)
-                if song:
-                    song.lastfm_playcount = playcount
-                    song.lastfm_tags = tags
-                    break
-                else:
-                    print(f"Error: Song with id {song_id} not found!")
+            if not playcount:
+                _, playcount, tags = fetch_lastfm_data_minimal((song_id, Artist.get_simple_name(artist), str(title).split("(")[0].strip(), api_key))
+
+            song = id_map.get(song_id)
+            if song:
+                song.lastfm_playcount = playcount
+                song.lastfm_tags = tags
+                song.additional_data["lastfm_update"] = "success" if playcount else "fail"
+
             time_taken = time.time() - start_time
             if time_taken < delay_per_request:
                 time.sleep(delay_per_request - time_taken)
@@ -219,14 +221,12 @@ def scan_library(verbose: bool = False) -> tuple[list[Song], list[Album], list[A
                 json.dump([s.to_dict() for s in updated_songs], f, ensure_ascii=False, indent=2)
     
     
-    song_without_lastfm = [s for s in updated_songs if not s.lastfm_playcount]
+    song_without_lastfm = [s for s in updated_songs if not s.lastfm_playcount and not s.additional_data.get("lastfm_update", False)]
     if song_without_lastfm:
         print(f"Updating Last.fm data for {len(song_without_lastfm)} songs...")
         update_lastfm_serial_with_throttling(song_without_lastfm)
         was_updated = True
-    failed = [f"{s.get_artists()} - {s.title}" for s in updated_songs if not s.lastfm_playcount]
-    if failed: print(f"Update failed for {len(failed)} songs:\n{', '.join(failed)}")
-        
+
     songs_without_wiki = [s for s in updated_songs if not s.additional_data.get("wiki_update", False)]
         
     if not was_updated and not songs_without_wiki:
@@ -342,8 +342,8 @@ def calc_song_similarity(song1: Song, song2: Song) -> float:
     
     return min(1, max(genre_score, tag_score, artist_score)*date_score)
 
-def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float = 0.5, 
-                         number: int = 10) -> list["Song"]:
+def song_recommendations(song: "Song", all_songs: list["Song"], seed: Song | None = None, 
+                         threshold: float = 0.1, number: int = 10) -> list["Song"]:
     """
     Get song recommendations based on similarity, with weighted random selection.
     Higher similarity => higher chance of being picked.
@@ -354,7 +354,8 @@ def song_recommendations(song: "Song", all_songs: list["Song"], threshold: float
     :return: List of recommended songs.
     """
     candidates = [(s, calc_song_similarity(song, s)*min(1, s.popularity)) 
-                  for s in all_songs if s != song and s.duration >= 120]
+                  for s in all_songs if s != song and s.duration >= 120
+                  and (not seed or map_genre(seed.genres) == map_genre(s.genres))]
     
     max_similarity = max([similarity for s, similarity in candidates if 
                           s.album_artist != song.album_artist])
@@ -390,14 +391,13 @@ import random
 
 def song_recommendations_genre(genre: str,
                                all_songs: list["Song"],
-                               threshold: float = 0.5,
+                               threshold: float = 0.2,
                                number: int = 10) -> list["Song"]:
     g = genre.lower()
     candidates = [(s, s.popularity)
-                  for s in all_songs
-                  if any(g == gg.lower() for gg in getattr(s, "genres", []) + getattr(s, "lastfm_tags", []))
-                  and getattr(s, "duration", 0) >= 120
-                  and getattr(s, "popularity", 0) > threshold]
+                  for s in all_songs if getattr(s, "duration", 0) >= 120
+                  and ("pop" in g or not any("pop" in gg for gg in s.genres))
+                  and any(g in gg for gg in s.genres)]
 
     if not candidates:
         return []

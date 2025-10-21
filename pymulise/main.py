@@ -13,6 +13,7 @@ from PIL import Image
 from modules.library_utils import song_recommendations, song_recommendations_genre
 from modules.playback_module import PlaybackChannel, PlaybackModule
 from modules.library_service import LibraryService
+from modules.scene_mapper import sample_songs_by_scene
 from modules.user_service import UserService
 from modules.filesys_transcoder import Transcoding
 from contextlib import asynccontextmanager
@@ -331,13 +332,14 @@ async def get_session(session_id: str):
         
         
 @app.get("/recommendations/{song_hash}")
-async def get_song_recommendations(song_hash: str):
+async def get_song_recommendations(song_hash: str, seed_hash: str | None = Query(None)):
     song = await library_service.get_song(song_hash)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
     all_songs, _, _ = await library_service.get_snapshot()
+    seed = await library_service.get_song(seed_hash) if seed_hash else None
     recommendations = [song.to_simple_dict() for 
-                       song in song_recommendations(song, all_songs, 0.5, 10)]
+                       song in song_recommendations(song, all_songs, seed, 0.1, 10)]
     return {
         "status": "ok",
         "recommendations": recommendations
@@ -352,6 +354,16 @@ async def get_song_recommendations2(genre: str):
     return {
         "status": "ok",
         "recommendations": recommendations
+    }
+    
+@app.get("/recommendations-by-scene/{n}")
+async def get_song_recommendations3(n: str):
+    print(f"Requested: {n} recommendations")
+    all_songs, _, _ = await library_service.get_snapshot()
+    scene_dict = sample_songs_by_scene(all_songs, int(n))
+    return {
+        "status": "ok",
+        "recommendations": scene_dict
     }
         
         

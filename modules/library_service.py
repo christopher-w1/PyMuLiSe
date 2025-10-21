@@ -65,7 +65,7 @@ class LibraryService:
     async def get_song(self, song_hash: str) -> Song | None:
         async with self._lock:
             for song in self.library_snapshot[0]:
-                if song.get_hash() == song_hash:
+                if song and song.get_hash() == song_hash:
                     return song
         return None
     
